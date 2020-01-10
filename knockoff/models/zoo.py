@@ -7,6 +7,8 @@ import knockoff.models.mnist
 import knockoff.models.imagenet
 
 
+# Try to fectch pretrained model from the 'pretrainedmodel' library.
+#Otherwise, create one on the fly.
 def get_net(modelname, modeltype, pretrained=None, **kwargs):
     assert modeltype in ('mnist', 'cifar', 'imagenet')
     if pretrained and pretrained is not None:

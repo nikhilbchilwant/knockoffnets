@@ -64,7 +64,7 @@ class Blackbox(object):
         if not osp.exists(checkpoint_path):
             checkpoint_path = osp.join(model_dir, 'checkpoint.pth.tar')
         print("=> loading checkpoint '{}'".format(checkpoint_path))
-        checkpoint = torch.load(checkpoint_path)
+        checkpoint = torch.load(checkpoint_path, map_location='cpu') #To run on local machine. Remove when you run on the server.
         epoch = checkpoint['epoch']
         best_test_acc = checkpoint['best_acc']
         model.load_state_dict(checkpoint['state_dict'])

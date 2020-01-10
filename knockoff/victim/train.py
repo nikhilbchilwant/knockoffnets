@@ -33,7 +33,9 @@ __maintainer__ = "Tribhuvanesh Orekondy"
 __email__ = "orekondy@mpi-inf.mpg.de"
 __status__ = "Development"
 
-
+"""
+Trains a model and emits model parameters from the given dataset and selected model architecture.
+"""
 def main():
     parser = argparse.ArgumentParser(description='Train a model')
     # Required arguments
@@ -74,14 +76,15 @@ def main():
         device = torch.device('cpu')
 
     # ----------- Set up dataset
+    #Checks validity of provided parameters
     dataset_name = params['dataset']
-    valid_datasets = datasets.__dict__.keys()
+    valid_datasets = datasets.__dict__.keys() #gives: dict_keys(['__file__', 'SVHN', '__spec__', '__cached__', '__path__', 'cifarlike', 'modelfamily_to_transforms', 'diabetic5', 'KMNIST', 'caltech256', 'Caltech256', '__doc__', 'dataset_to_modelfamily', 'Indoor67', 'transforms', '__package__', 'CIFAR10', 'EMNISTLetters', '__name__', 'indoor67', 'tinyimagenet200', 'Diabetic5', 'EMNIST', 'mnistlike', 'MNIST', '__builtins__', 'TinyImageNet200', 'FashionMNIST', 'ImageNet1k', 'imagenet1k', 'CIFAR100', 'cubs200', 'CUBS200', '__loader__'])
     if dataset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     dataset = datasets.__dict__[dataset_name]
 
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
-    train_transform = datasets.modelfamily_to_transforms[modelfamily]['train']
+    train_transform = datasets.modelfamily_to_transforms[modelfamily]['train'] #??? Is it right to use imagenet transformer for all other datasets in the family?
     test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
     trainset = dataset(train=True, transform=train_transform)
     testset = dataset(train=False, transform=test_transform)
@@ -105,7 +108,7 @@ def main():
     out_path = params['out_path']
     model_utils.train_model(model, trainset, testset=testset, device=device, **params)
 
-    # Store arguments
+    # Store arguments in json file
     params['created_on'] = str(datetime.now())
     params_out_path = osp.join(out_path, 'params.json')
     with open(params_out_path, 'w') as jf:

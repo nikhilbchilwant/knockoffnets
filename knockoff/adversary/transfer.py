@@ -95,7 +95,7 @@ def main():
     parser.add_argument('policy', metavar='PI', type=str, help='Policy to use while training',
                         choices=['random', 'adaptive'])
     parser.add_argument('victim_model_dir', metavar='PATH', type=str,
-                        help='Path to victim model. Should contain files "model_best.pth.tar" and "params.json"')
+                        help='Path to victim model. Should contain files "model_best.pth.tar" and "params.json"') #??? Why do we need this?
     parser.add_argument('--out_dir', metavar='PATH', type=str,
                         help='Destination directory to store transfer set', required=True)
     parser.add_argument('--budget', metavar='N', type=int, help='Size of transfer set to construct',
