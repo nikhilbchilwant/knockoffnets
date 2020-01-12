@@ -5,26 +5,29 @@ import os.path as osp
 import knockoff.models.cifar
 import knockoff.models.mnist
 import knockoff.models.imagenet
+import knockoff.models.classification
 
+from knockoff import datasets
 
 # Try to fectch pretrained model from the 'pretrainedmodel' library.
 #Otherwise, create one on the fly.
 def get_net(modelname, modeltype, pretrained=None, **kwargs):
-    assert modeltype in ('mnist', 'cifar', 'imagenet')
+    assert modeltype in ('classification', 'entailment', 'sentiment')
     if pretrained and pretrained is not None:
-        return get_pretrainednet(modelname, modeltype, pretrained, **kwargs)
+        raise NotImplementedError("No pretrained model added yet.")
+        # return get_pretrainednet(modelname, modeltype, pretrained, **kwargs)
     else:
-        try:
+        # try:
             # This should have ideally worked:
-            model = eval('knockoff.models.{}.{}'.format(modeltype, modelname))(**kwargs)
-        except AssertionError:
-            # But, there's a bug in pretrained models which ignores the num_classes attribute.
-            # So, temporarily load the model and replace the last linear layer
-            model = eval('knockoff.models.{}.{}'.format(modeltype, modelname))()
-            if 'num_classes' in kwargs:
-                num_classes = kwargs['num_classes']
-                in_feat = model.last_linear.in_features
-                model.last_linear = nn.Linear(in_feat, num_classes)
+        model = eval('knockoff.models.{}.{}'.format(modeltype, modelname))(**kwargs)
+        # except AssertionError:
+        #     # But, there's a bug in pretrained models which ignores the num_classes attribute.
+        #     # So, temporarily load the model and replace the last linear layer
+        #     model = eval('knockoff.models.{}.{}'.format(modeltype, modelname))()
+        #     if 'num_classes' in kwargs:
+        #         num_classes = kwargs['num_classes']
+        #         in_feat = model.last_linear.in_features
+        #         model.last_linear = nn.Linear(in_feat, num_classes)
         return model
 
 
