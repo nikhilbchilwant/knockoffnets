@@ -36,7 +36,7 @@ def main():
 	parser.add_argument('-d', '--device_id', metavar='D', type=int, help='Device id. -1 for CPU.', default=0)
 	parser.add_argument('-b', '--batch-size', type=int, default=32, metavar='N',
 						help='input batch size for training (default: 64)')
-	parser.add_argument('--datadir', default='./.data',
+	parser.add_argument('--datadir', default='.data',
 						help='data directory (default=.data)')
 	parser.add_argument('-e', '--epochs', type=int, default=10, metavar='N',
 						help='number of epochs to train (default: 100)')
@@ -95,13 +95,13 @@ def main():
 	ngrams = metadata['ngram']
 
 	# If dataset does not exist, download it and save it
-	datadir = datadir + '/' + dataset_name.lower() + '_csv'
-	train_data_path = os.path.join(datadir, dataset_name + "_ngrams_{}_train.data".format(ngrams))
-	test_data_path = os.path.join(datadir, dataset_name + "_ngrams_{}_test.data".format(ngrams))
+	dataset_dir = datadir + '/' + dataset_name.lower() + '_csv'
+	train_data_path = os.path.join(dataset_dir, dataset_name + "_ngrams_{}_train.data".format(ngrams))
+	test_data_path = os.path.join(dataset_dir, dataset_name + "_ngrams_{}_test.data".format(ngrams))
 	if not os.path.exists(datadir):
 		print("Creating directory {}".format(datadir))
-		os.mkdir(datadir)
-		trainset, testset = text_classification.DATASETS[dataset_name](root=datadir, ngrams=ngrams)
+		os.mkdir('.data')
+		trainset, testset = text_classification.DATASETS[dataset_name](root='.data', ngrams=ngrams)
 		print("Saving train data to {}".format(train_data_path))
 		torch.save(trainset, train_data_path)
 		print("Saving test data to {}".format(test_data_path))
