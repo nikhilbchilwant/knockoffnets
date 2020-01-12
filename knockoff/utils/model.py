@@ -87,11 +87,11 @@ def train_and_valid(trainset, testset, model, model_name, modelfamily, out_path,
 			}
 			torch.save(state, model_out_path)
 
-	# Log
-	run_id = str(datetime.now())
-	with open(log_path, 'a') as af:
-		data_column = [run_id, epoch, train_loss.item(), test_acc, best_test_acc]
-		af.write('\t'.join([str(c) for c in data_column]) + '\n')
+		# Log
+		run_id = str(datetime.now())
+		with open(log_path, 'a') as af:
+			data_column = [run_id, epoch, train_loss.item(), test_acc, best_test_acc]
+			af.write('\t'.join([str(c) for c in data_column]) + '\n')
 
 
 def test(model, test_data, batch_size=16, device='cpu'):
