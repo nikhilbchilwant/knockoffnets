@@ -27,6 +27,8 @@ import knockoff.utils.utils as knockoff_utils
 from knockoff.victim.blackbox import Blackbox
 import knockoff.config as cfg
 
+from torchtext.datasets import text_classification
+
 __author__ = "Tribhuvanesh Orekondy"
 __maintainer__ = "Tribhuvanesh Orekondy"
 __email__ = "orekondy@mpi-inf.mpg.de"
@@ -113,6 +115,7 @@ def main():
     # ----------- Other params
     parser.add_argument('-d', '--device_id', metavar='D', type=int, help='Device id', default=0)
     parser.add_argument('-w', '--nworkers', metavar='N', type=int, help='# Worker threads to load data', default=10)
+    parser.add_argument('-n', '--ngrams', metavar='NG', type=int, help='#n-grams', default=2)
     args = parser.parse_args()
     params = vars(args)
 
@@ -128,16 +131,38 @@ def main():
 
     # ----------- Set up queryset
     queryset_name = params['queryset']
-    valid_datasets = datasets.__dict__.keys()
+    ngrams = params['ngrams']
+    valid_datasets = list(text_classification.DATASETS.keys())
     if queryset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[queryset_name]
-    transform = datasets.modelfamily_to_transforms[modelfamily]['test']
-    queryset = datasets.__dict__[queryset_name](train=True, transform=transform)
+    # transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    # queryset = datasets.__dict__[queryset_name](train=True, transform=transform)
+    dataset_dir = '.data'
+    dataset_dir = dataset_dir + '/' + queryset_name.lower() + '_csv'
+    train_data_path = os.path.join(dataset_dir, queryset_name + "_ngrams_{}_train.data".format(ngrams))
+    test_data_path = os.path.join(dataset_dir, queryset_name + "_ngrams_{}_test.data".format(ngrams))
+    if not os.path.exists(dataset_dir):
+        # print("Creating directory {}".format(dataset_dir))
+        # os.mkdir(dataset_dir)
+        trainset, testset = text_classification.DATASETS[queryset_name](root='.data', ngrams=ngrams)
+        print("Saving train data to {}".format(train_data_path))
+        torch.save(trainset, train_data_path)
+        print("Saving test data to {}".format(test_data_path))
+        torch.save(testset, test_data_path)
+    else:
+        print("Loading train data from {}".format(train_data_path))
+        trainset = torch.load(train_data_path)
+        print("Loading test data from {}".format(test_data_path))
+        testset = torch.load(test_data_path)
 
-    # ----------- Initialize blackbox
+    queryset, _ = trainset, testset
+    vocab_size = len(trainset.get_vocab())
+    num_classes = len(trainset.get_labels())
+    # ----------- Initialize blackbox i.e. victim model
     blackbox_dir = params['victim_model_dir']
-    blackbox = Blackbox.from_modeldir(blackbox_dir, device)
+    embed_dim = 32
+    blackbox = Blackbox.from_modeldir(blackbox_dir, vocab_size, num_classes, embed_dim, device)
 
     # ----------- Initialize adversary
     batch_size = params['batch_size']

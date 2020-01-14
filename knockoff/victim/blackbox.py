@@ -42,7 +42,7 @@ class Blackbox(object):
         self.__call_count = 0
 
     @classmethod
-    def from_modeldir(cls, model_dir, device=None, output_type='probs'):
+    def from_modeldir(cls, model_dir, vocab_size, embed_dim, num_classes, device=None, output_type='probs'):
         device = torch.device('cuda') if device is None else device
 
         # What was the model architecture used by this model?
@@ -50,13 +50,13 @@ class Blackbox(object):
         with open(params_path) as jf:
             params = json.load(jf)
         model_arch = params['model_arch']
-        num_classes = params['num_classes']
+        # num_classes = params['num_classes']
         victim_dataset = params.get('dataset', 'imagenet')
         modelfamily = datasets.dataset_to_modelfamily[victim_dataset]
 
         # Instantiate the model
         # model = model_utils.get_net(model_arch, n_output_classes=num_classes)
-        model = zoo.get_net(model_arch, modelfamily, pretrained=None, num_classes=num_classes)
+        model = zoo.get_net(model_arch, modelfamily, pretrained=None, vocab_size=vocab_size, num_class=num_classes, embed_dim=embed_dim)
         model = model.to(device)
 
         # Load weights
@@ -64,7 +64,7 @@ class Blackbox(object):
         if not osp.exists(checkpoint_path):
             checkpoint_path = osp.join(model_dir, 'checkpoint.pth.tar')
         print("=> loading checkpoint '{}'".format(checkpoint_path))
-        checkpoint = torch.load(checkpoint_path, map_location='cpu') #To run on local machine. Remove when you run on the server.
+        checkpoint = torch.load(checkpoint_path, map_location=device) #To run on local machine. Remove when you run on the server.
         epoch = checkpoint['epoch']
         best_test_acc = checkpoint['best_acc']
         model.load_state_dict(checkpoint['state_dict'])
