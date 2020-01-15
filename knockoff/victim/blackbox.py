@@ -42,7 +42,7 @@ class Blackbox(object):
         self.__call_count = 0
 
     @classmethod
-    def from_modeldir(cls, model_dir, vocab_size, embed_dim, num_classes, device=None, output_type='probs'):
+    def from_modeldir(cls, model_dir, vocab_size, num_classes, embed_dim, device=None, output_type='probs'):
         device = torch.device('cuda') if device is None else device
 
         # What was the model architecture used by this model?
@@ -91,15 +91,15 @@ class Blackbox(object):
 
         return y_t_probs
 
-    def __call__(self, query_input):
-        TypeCheck.multiple_image_blackbox_input_tensor(query_input)
+    def __call__(self, query_input, offsets):
+        # TypeCheck.multiple_image_blackbox_input_tensor(query_input)
 
         with torch.no_grad():
             query_input = query_input.to(self.device)
-            query_output = self.__model(query_input)
+            query_output = self.__model(query_input, offsets)
             self.__call_count += query_input.shape[0]
 
             query_output_probs = F.softmax(query_output, dim=1).cpu()
-
-        query_output_probs = self.truncate_output(query_output_probs)
+        #
+        # query_output_probs = self.truncate_output(query_output_probs)
         return query_output_probs

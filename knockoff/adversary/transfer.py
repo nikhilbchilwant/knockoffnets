@@ -36,7 +36,7 @@ __status__ = "Development"
 
 
 class RandomAdversary(object):
-    def __init__(self, blackbox, queryset, batch_size=8):
+    def __init__(self, blackbox, queryset, batch_size=16):
         self.blackbox = blackbox
         self.queryset = queryset
 
@@ -57,37 +57,57 @@ class RandomAdversary(object):
         self.transferset = []
 
     def get_transferset(self, budget):
-        start_B = 0
-        end_B = budget
+
+        sampler = torch.utils.data.RandomSampler(self.queryset, replacement=True, num_samples=budget)
+        count = 0
+        # selected_element_indices = np.random.choice(len(self.queryset), budget)
         with tqdm(total=budget) as pbar:
-            for t, B in enumerate(range(start_B, end_B, self.batch_size)):
-                idxs = np.random.choice(list(self.idx_set), replace=False,
-                                        size=min(self.batch_size, budget - len(self.transferset)))
-                self.idx_set = self.idx_set - set(idxs)
+            # while budget>0:
+            #     current_batch_size = self.batch_size
+            #     if budget < self.batch_size:
+            #         current_batch_size = budget
 
-                if len(self.idx_set) == 0:
-                    print('=> Query set exhausted. Now repeating input examples.')
-                    self.idx_set = set(range(len(self.queryset)))
+            data = DataLoader(self.queryset, batch_size=self.batch_size, collate_fn=model_utils.generate_batch, sampler=sampler)
+            for text, offsets, cls in data:
+                query_prediction_probabilities = self.blackbox(text, offsets)
+                predicted_label = query_prediction_probabilities.argmax(1)
+                for text_sample, predicted_label_sample in zip(text, predicted_label.cpu()):
+                    self.transferset.append((text_sample, predicted_label_sample.cpu()))
+                count = count + len(cls)
+                pbar.update(count)
 
-                x_t = torch.stack([self.queryset[i][0] for i in idxs]).to(self.blackbox.device)
-                y_t = self.blackbox(x_t).cpu()
-
-                if hasattr(self.queryset, 'samples'):
-                    # Any DatasetFolder (or subclass) has this attribute
-                    # Saving image paths are space-efficient
-                    img_t = [self.queryset.samples[i][0] for i in idxs]  # Image paths
-                else:
-                    # Otherwise, store the image itself
-                    # But, we need to store the non-transformed version
-                    img_t = [self.queryset.data[i] for i in idxs]
-                    if isinstance(self.queryset.data[0], torch.Tensor):
-                        img_t = [x.numpy() for x in img_t]
-
-                for i in range(x_t.size(0)):
-                    img_t_i = img_t[i].squeeze() if isinstance(img_t[i], np.ndarray) else img_t[i]
-                    self.transferset.append((img_t_i, y_t[i].cpu().squeeze()))
-
-                pbar.update(x_t.size(0))
+            # budget = budget - self.batch_size
+            #     count = count + current_batch_size
+            # pbar.update(count)
+                # with tqdm(total=budget) as pbar:
+                #     for t, B in enumerate(range(start_B, end_B, self.batch_size)):
+                #         idxs = np.random.choice(list(self.idx_set), replace=False,
+                #                                 size=min(self.batch_size, budget - len(self.transferset)))
+                #         self.idx_set = self.idx_set - set(idxs)
+                #
+                #         if len(self.idx_set) == 0:
+                #             print('=> Query set exhausted. Now repeating input examples.')
+                #             self.idx_set = set(range(len(self.queryset)))
+                #
+                #         x_t = torch.stack([self.queryset[i][0] for i in idxs]).to(self.blackbox.device)
+                #         y_t = self.blackbox(x_t).cpu()
+                #
+                #         if hasattr(self.queryset, 'samples'):
+                #             # Any DatasetFolder (or subclass) has this attribute
+                #             # Saving image paths are space-efficient
+                #             img_t = [self.queryset.samples[i][0] for i in idxs]  # Image paths
+                #         else:
+                #             # Otherwise, store the image itself
+                #             # But, we need to store the non-transformed version
+                #             img_t = [self.queryset.data[i] for i in idxs]
+                #             if isinstance(self.queryset.data[0], torch.Tensor):
+                #                 img_t = [x.numpy() for x in img_t]
+                #
+                #         for i in range(x_t.size(0)):
+                #             img_t_i = img_t[i].squeeze() if isinstance(img_t[i], np.ndarray) else img_t[i]
+                #             self.transferset.append((img_t_i, y_t[i].cpu().squeeze()))
+                #
+                #         pbar.update(x_t.size(0))
 
         return self.transferset
 
