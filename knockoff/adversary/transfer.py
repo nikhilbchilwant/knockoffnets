@@ -162,9 +162,10 @@ def main():
     dataset_dir = dataset_dir + '/' + queryset_name.lower() + '_csv'
     train_data_path = os.path.join(dataset_dir, queryset_name + "_ngrams_{}_train.data".format(ngrams))
     test_data_path = os.path.join(dataset_dir, queryset_name + "_ngrams_{}_test.data".format(ngrams))
-    if not os.path.exists(dataset_dir):
-        # print("Creating directory {}".format(dataset_dir))
-        # os.mkdir(dataset_dir)
+    if not (os.path.exists(train_data_path) and os.path.exists(test_data_path)):
+        if not os.path.exists('.data'):
+            print("Creating directory {}".format(dataset_dir))
+            os.mkdir('.data')
         trainset, testset = text_classification.DATASETS[queryset_name](root='.data', ngrams=ngrams)
         print("Saving train data to {}".format(train_data_path))
         torch.save(trainset, train_data_path)
