@@ -77,7 +77,6 @@ class CNN(nn.Module):
 		max_out1 = self.conv_block(input, self.conv1)
 		max_out2 = self.conv_block(input, self.conv2)
 		max_out3 = self.conv_block(input, self.conv3)
-		
 		all_out = torch.cat((max_out1, max_out2, max_out3), 1)
 		# all_out.size() = (batch_size, num_kernels*out_channels)
 		fc_in = self.dropout(all_out)
