@@ -6,7 +6,7 @@ from torch.autograd import Variable
 from torch.nn import functional as F
 
 class SelfAttention(nn.Module):
-	def __init__(self, batch_size, output_size, hidden_size, vocab_size, embedding_length, weights):
+	def __init__(self, batch_size, output_size, hidden_size, vocab_size, embedding_length, weights=None):
 		super(SelfAttention, self).__init__()
 
 		"""
@@ -31,7 +31,11 @@ class SelfAttention(nn.Module):
 		self.weights = weights
 
 		self.word_embeddings = nn.Embedding(vocab_size, embedding_length)
-		self.word_embeddings.weights = nn.Parameter(weights, requires_grad=False)
+		
+		if weights:
+			self.word_embeddings.weights = \
+				nn.Parameter(weights, requires_grad=False)
+
 		self.dropout = 0.8
 		self.bilstm = nn.LSTM(embedding_length, hidden_size, dropout=self.dropout, bidirectional=True)
 		# We will use da = 350, r = 30 & penalization_coeff = 1 as per given in the self-attention original ICLR paper
