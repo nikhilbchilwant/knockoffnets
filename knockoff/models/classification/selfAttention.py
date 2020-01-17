@@ -31,7 +31,7 @@ class SelfAttention(nn.Module):
 		self.weights = weights
 
 		self.word_embeddings = nn.Embedding(vocab_size, embedding_length)
-		
+
 		if weights:
 			self.word_embeddings.weights = \
 				nn.Parameter(weights, requires_grad=False)
@@ -95,7 +95,8 @@ class SelfAttention(nn.Module):
 		# 	h_0 = Variable(torch.zeros(2, batch_size, self.hidden_size).cuda())
 		# 	c_0 = Variable(torch.zeros(2, batch_size, self.hidden_size).cuda())
 
-		output, (h_n, c_n) = self.bilstm(input, (h_0, c_0))
+		output, (h_n, c_n) = self.bilstm(input)
+		# output, (h_n, c_n) = self.bilstm(input, (h_0, c_0))
 		output = output.permute(1, 0, 2)
 		# output.size() = (batch_size, num_seq, 2*hidden_size)
 		# h_n.size() = (1, batch_size, hidden_size)
