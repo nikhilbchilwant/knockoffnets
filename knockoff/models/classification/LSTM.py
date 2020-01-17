@@ -57,14 +57,8 @@ class LSTMClassifier(nn.Module):
         #     h_0 = Variable(torch.zeros(1, batch_size, self.hidden_size).cuda())
         #     c_0 = Variable(torch.zeros(1, batch_size, self.hidden_size).cuda())
         
-        # try:
-        # output, (final_hidden_state, final_cell_state) = self.lstm(input, (h_0, c_0))
         output, (final_hidden_state, final_cell_state) = self.lstm(input)
         final_output = self.label(final_hidden_state[-1]) # final_hidden_state.size() = (1, batch_size, hidden_size) & final_output.size() = (batch_size, output_size)
-        # except Exception as e:
-        #     print(e)
-        #     print('h_0.size():', h_0.size())
-        #     print('c_0.size():', c_0.size())
-        #     print('input.size():', input.size())
+        
             
         return final_output
