@@ -36,8 +36,7 @@ def main():
 	parser.add_argument('-d', '--device_id', metavar='D', type=int, help='Device id. -1 for CPU.', default=0)
 	parser.add_argument('-b', '--batch-size', type=int, default=32, metavar='N',
 						help='input batch size for training (default: 64)')
-	parser.add_argument('--datadir', default='.data',
-						help='data directory (default=.data)')
+	parser.add_argument('--datadir', default='.data', help='data directory (default=.data)')
 	parser.add_argument('-e', '--epochs', type=int, default=10, metavar='N',
 						help='number of epochs to train (default: 100)')
 	parser.add_argument('--embed-dim', type=int, default=32,
@@ -121,8 +120,8 @@ def main():
 	model = zoo.get_net(model_name, modelfamily, pretrained, vocab_size=vocab_size, embed_dim=embed_dim,
 						num_class=num_classes)
 	model = model.to(device)
-	model_utils.train_and_valid(trainset, testset, model, model_name, modelfamily, out_path, batch_size, lr, lr_gamma,
-								num_workers, device=device, num_epochs=num_epochs)
+	model_utils.train_and_valid(trainset, testset, model, model_name, modelfamily, out_path, batch_size=batch_size, lr=lr, lr_gamma=lr_gamma,
+								num_workers=num_workers, device=device, num_epochs=num_epochs)
 
 	# Store arguments in json file. Maybe for the transfer set step?
 	params['created_on'] = str(datetime.now())

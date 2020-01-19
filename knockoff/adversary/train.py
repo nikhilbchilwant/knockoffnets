@@ -20,6 +20,8 @@ import knockoff.config as cfg
 import knockoff.utils.model as model_utils
 from knockoff import datasets
 import knockoff.models.zoo as zoo
+from torchtext.datasets import text_classification
+
 
 __author__ = "Tribhuvanesh Orekondy"
 __maintainer__ = "Tribhuvanesh Orekondy"
@@ -127,6 +129,12 @@ def main():
     # Attacker's defense
     parser.add_argument('--argmaxed', action='store_true', help='Only consider argmax labels', default=False)
     parser.add_argument('--optimizer_choice', type=str, help='Optimizer', default='sgdm', choices=('sgd', 'sgdm', 'adam', 'adagrad'))
+    parser.add_argument('--datadir', default='.data', help='data directory (default=.data)')
+    parser.add_argument('--embed-dim', type=int, default=32,
+                        help='embed dim. (default=32)')
+    parser.add_argument('-o', '--out_path', metavar='PATH', type=str, help='Output path for model',
+                        default=cfg.MODEL_DIR)
+
     args = parser.parse_args()
     params = vars(args)
 
@@ -145,6 +153,7 @@ def main():
     num_classes = transferset_samples[0][1].size(0)
     print('=> found transfer set with {} samples, {} classes'.format(len(transferset_samples), num_classes))
 
+
     # ----------- Clean up transfer (if necessary)
     if params['argmaxed']:
         new_transferset_samples = []
@@ -156,25 +165,53 @@ def main():
             y_i_1hot[argmax_k] = 1.
             new_transferset_samples.append((x_i, y_i_1hot))
         transferset_samples = new_transferset_samples
-
     # ----------- Set up testset
     dataset_name = params['testdataset']
     valid_datasets = datasets.__dict__.keys()
-    modelfamily = datasets.dataset_to_modelfamily[dataset_name]
-    transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    # modelfamily = datasets.dataset_to_modelfamily[dataset_name]
+    # transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    # See /knockoff/datasets/__init__.py for mapping
+    modelfamily = datasets.dataset_to_modelfamily[dataset_name]  # e.g. 'classification'
+    metadata = datasets.dataset_metadata[dataset_name]  # Relevant parameters for the task. e.g. 'ngram'
+
+    # Currently supports only the torchtext datasets
+    valid_datasets = list(text_classification.DATASETS.keys())
     if dataset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
-    dataset = datasets.__dict__[dataset_name]
-    testset = dataset(train=False, transform=transform)
-    if len(testset.classes) != num_classes:
-        raise ValueError('# Transfer classes ({}) != # Testset classes ({})'.format(num_classes, len(testset.classes)))
+
+    # If dataset does not exist, download it and save it
+    datadir = params['datadir']
+    ngrams = metadata['ngram']
+
+    dataset_dir = datadir + '/' + dataset_name.lower() + '_csv'
+    train_data_path = os.path.join(dataset_dir, dataset_name + "_ngrams_{}_train.data".format(ngrams))
+    test_data_path = os.path.join(dataset_dir, dataset_name + "_ngrams_{}_test.data".format(ngrams))
+    if not (os.path.exists(train_data_path) and os.path.exists(test_data_path)):
+        if not os.path.exists('.data'):
+            print("Creating directory {}".format(datadir))
+            os.mkdir('.data')
+        trainset, testset = text_classification.DATASETS[dataset_name](root='.data', ngrams=ngrams)
+        print("Saving train data to {}".format(train_data_path))
+        torch.save(trainset, train_data_path)
+        print("Saving test data to {}".format(test_data_path))
+        torch.save(testset, test_data_path)
+    else:
+        print("Loading train data from {}".format(train_data_path))
+        trainset = torch.load(train_data_path)
+        print("Loading test data from {}".format(test_data_path))
+        testset = torch.load(test_data_path)
+
+    if len(trainset.get_labels()) != num_classes:
+        raise ValueError('# Transfer classes ({}) != # Testset classes ({})'.format(num_classes, len(testset.get_labels())))
 
     # ----------- Set up model
     model_name = params['model_arch']
     pretrained = params['pretrained']
     # model = model_utils.get_net(model_name, n_output_classes=num_classes, pretrained=pretrained)
-    model = zoo.get_net(model_name, modelfamily, pretrained, num_classes=num_classes)
-    model = model.to(device)
+
+    # model = zoo.get_net(model_name, modelfamily, pretrained, num_classes=num_classes)
+    model = zoo.get_net(model_name, modelfamily, pretrained, vocab_size=len(trainset.get_vocab()), embed_dim=params['embed_dim'],
+                        num_class=num_classes)
 
     # ----------- Train
     budgets = [int(b) for b in params['budgets'].split(',')]
@@ -184,18 +221,18 @@ def main():
         torch.manual_seed(cfg.DEFAULT_SEED)
         torch.cuda.manual_seed(cfg.DEFAULT_SEED)
 
-        transferset = samples_to_transferset(transferset_samples, budget=b, transform=transform)
-        print()
-        print('=> Training at budget = {}'.format(len(transferset)))
+        # transferset = samples_to_transferset(transferset_samples, budget=b, transform=transform)
+        # print()
+        print('=> Training at budget = {}'.format(len(transferset_samples)))
 
         optimizer = get_optimizer(model.parameters(), params['optimizer_choice'], **params)
         print(params)
 
         checkpoint_suffix = '.{}'.format(b)
         criterion_train = model_utils.soft_cross_entropy
-        model_utils.train_model(model, transferset, model_dir, testset=testset, criterion_train=criterion_train,
-                                checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer, **params)
-
+        out_path = params['model_dir']
+        batch_size = 64
+        model_utils.train_and_valid(trainset, testset, model, model_name, modelfamily, out_path, device=device)
     # Store arguments
     params['created_on'] = str(datetime.now())
     params_out_path = osp.join(model_dir, 'params_train.json')

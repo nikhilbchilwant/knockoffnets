@@ -44,7 +44,7 @@ class RandomAdversary(object):
         self.batch_size = batch_size
         self.idx_set = set()
 
-        self.transferset = []  # List of tuples [(img_path, output_probs)]
+        self.transferset = []  # List of tuples [(text tensor, label)]
 
         self._restart()
 
@@ -68,12 +68,16 @@ class RandomAdversary(object):
             #         current_batch_size = budget
 
             data = DataLoader(self.queryset, batch_size=self.batch_size, collate_fn=model_utils.generate_batch, sampler=sampler)
-            for text, offsets, cls in data:
+            for i, (text, offsets, label) in enumerate(data):
                 query_prediction_probabilities = self.blackbox(text, offsets)
-                predicted_label = query_prediction_probabilities.argmax(1)
-                for text_sample, predicted_label_sample in zip(text, predicted_label.cpu()):
-                    self.transferset.append((text_sample, predicted_label_sample.cpu()))
-                count = count + len(cls)
+                offsets = torch.cat((offsets, torch.tensor([len(text)-1])), dim=0)
+
+                for sample_index in range(0, len(query_prediction_probabilities)):
+                    self.transferset.append((text.narrow(0, offsets[sample_index],
+                                                         offsets[sample_index + 1] - offsets[sample_index] + 1),
+                                             query_prediction_probabilities[sample_index]))
+
+                count = count + len(label)
                 pbar.update(count)
 
             # budget = budget - self.batch_size
