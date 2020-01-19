@@ -26,6 +26,17 @@ __status__ = "Development"
 Trains a model and emits model parameters from the given dataset and selected model architecture.
 """
 
+def count_seqlen(datasets):
+
+	seq_len = 0
+
+	for dataset in datasets:
+		for _, x in dataset:
+			x_len = len(x)
+			if x_len > seq_len:
+				seq_len = x_len
+
+	return seq_len
 
 def main():
 	parser = argparse.ArgumentParser(description='Train a model')
@@ -83,6 +94,9 @@ def main():
 	model_name = params['model_arch']
 	pretrained = params['pretrained']
 
+	# 20200119 LIN, Y.D.
+	hidden_size = params['hidden_size']
+
 	if params['device_id'] >= 0:
 		os.environ["CUDA_VISIBLE_DEVICES"] = str(params['device_id'])
 		device = torch.device('cuda:'+ params['device_id'])
@@ -124,14 +138,28 @@ def main():
 	vocab_size = len(trainset.get_vocab())
 	params['num_classes'] = len(trainset.get_labels())
 	num_classes = params['num_classes']
-	model = zoo.get_net(model_name, modelfamily, pretrained, 
-						vocab_size=vocab_size, embed_dim=embed_dim,
-						num_class=num_classes)
+
+	if model_name == 'attention_model':
+
+		seq_len = count_seqlen([trainset, testset])
+		model = zoo.get_net(model_name, modelfamily, pretrained, 
+							vocab_size=vocab_size, embed_dim=embed_dim,
+							hidden_size=hidden_size, num_class=num_classes, 
+							seq_len=seq_len)
+
+	elif model_name == 'wordembedding':
+		model = zoo.get_net(model_name, modelfamily, pretrained, 
+							vocab_size=vocab_size, embed_dim=embed_dim,
+							num_class=num_classes)
 	model = model.to(device)
 
 	# 20200117 LIN,Y.D. Conditions for different models
-	if model_name in ['attention_model']:
-		pass
+	if model_name == 'attention_model':
+		optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+		scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=lr_gamma)
+		criterion = nn.CrossEntropyLoss(reduction='mean')
+		collate_fn = model_utils.generate_batch_for_var_length
+		
 	elif model_name == 'wordembedding':
 		optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 		scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=lr_gamma)
