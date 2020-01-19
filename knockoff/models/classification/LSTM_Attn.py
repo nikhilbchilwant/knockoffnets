@@ -10,40 +10,39 @@ import numpy as np
 __all__ = ['attention_model']
 
 class AttentionModel(torch.nn.Module):
-	def __init__(self, batch_size, num_class, hidden_size, vocab_size, seq_len,
-				 embedding_length, weights=None):
+	def __init__(self, num_class, hidden_size,  
+				 vocab_size, seq_len, embed_dim, 
+				 num_layers=1, dropout=.5, weights=None):
 		super(AttentionModel, self).__init__()
 		
 		"""
 		Arguments
 		---------
-		batch_size : Size of the batch which is same as the batch_size of the data returned by the TorchText BucketIterator
 		num_class : 2 = (pos, neg)
 		hidden_sie : Size of the hidden_state of the LSTM
 		vocab_size : Size of the vocabulary containing unique words
-		embedding_length : Embeddding dimension of GloVe word embeddings
+		embed_dim : Embeddding dimension of GloVe word embeddings
 		weights : Pre-trained GloVe word_embeddings which we will use to create our word_embedding look-up table 
 		
 		--------
 		
 		"""
 		
-		self.batch_size = batch_size
 		self.num_class = num_class
 		self.hidden_size = hidden_size
 		self.vocab_size = vocab_size
 		self.seq_len = seq_len
-		self.embedding_length = embedding_length
+		self.embed_dim = embed_dim
 		
-		self.word_embeddings = nn.Embedding(vocab_size, embedding_length)
+		self.word_embeddings = nn.Embedding(vocab_size, embed_dim)
 
 		if weights: 
 			self.word_embeddings.weights = \
 				nn.Parameter(weights, requires_grad=False)
 				
-		self.lstm = nn.LSTM(embedding_length, hidden_size, batch_first=True)
-		self.label = nn.Linear(hidden_size, num_class)
-		#self.attn_fc_layer = nn.Linear()
+		self.lstm = nn.LSTM(embed_dim, hidden_size, batch_first=True, 
+							num_layers=num_layers,  dropout=dropout)
+		self.label = nn.Linear(hidden_size*num_layers, num_class)
 
 		self._init_weights()
 		
@@ -72,15 +71,22 @@ class AttentionModel(torch.nn.Module):
 					  
 		"""
 		
-		hidden = final_state.squeeze(0)
+		# hidden = final_state.squeeze(0)
+		hidden = final_state.permute(1, 2, 0)
 		lstm_output = lstm_output.permute(1, 0, 2)
-		attn_weights = torch.bmm(lstm_output, hidden.unsqueeze(2)).squeeze(2)
+		attn_weights = torch.bmm(lstm_output, hidden)
+		# Alt Code!
+		# attn_weights = torch.bmm(lstm_output, hidden.unsqueeze(2)).squeeze(2)
 		soft_attn_weights = F.softmax(attn_weights, 1)
 		new_hidden_state = torch.bmm(
-			lstm_output.transpose(1, 2), 
-			soft_attn_weights.unsqueeze(2)).squeeze(2)
+			lstm_output.transpose(1, 2), soft_attn_weights)
+
+		# Alt Code!
+		# new_hidden_state = torch.bmm(
+		# 	lstm_output.transpose(1, 2), 
+		# 	soft_attn_weights.unsqueeze(2)).squeeze(2)
 		
-		return new_hidden_state
+		return new_hidden_state.view(new_hidden_state.size(0), -1)
 
 
 	def _init_weights(self):
@@ -127,6 +133,8 @@ class AttentionModel(torch.nn.Module):
 		
 		output, (final_hidden_state, final_cell_state) = self.lstm(input)
 		output, _ = pad_packed_sequence(output, total_length=self.seq_len)
+		# print('output.size():', output.size())
+		# print('final_hidden_state.size():', final_hidden_state.size())
 		# output, (final_hidden_state, final_cell_state) = self.lstm(input, (h_0, c_0)) # final_hidden_state.size() = (1, batch_size, hidden_size) 
 		# output = output.permute(1, 0, 2) # output.size() = (batch_size, num_seq, hidden_size)
 		

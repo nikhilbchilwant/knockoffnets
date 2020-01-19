@@ -76,6 +76,10 @@ def main():
 	# 20200117 LIN,Y.D. More arguments
 	parser.add_argument('--hidden_size', type=int, default=32, metavar='N',
 						help='The hidden size for the recurrent network')
+	parser.add_argument('--num_layers', type=int, metavar='N', 
+						help='The number of stack of RNN-like network')
+	parser.add_argument('--dropout', type=float, metavar='N',
+						help='The dropout of the network')
 
 	args = parser.parse_args()
 	params = vars(args)
@@ -96,6 +100,8 @@ def main():
 
 	# 20200119 LIN, Y.D.
 	hidden_size = params['hidden_size']
+	dropout = params['dropout']
+	num_layers = params['num_layers']
 
 	if params['device_id'] >= 0:
 		os.environ["CUDA_VISIBLE_DEVICES"] = str(params['device_id'])
@@ -145,7 +151,8 @@ def main():
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
 							hidden_size=hidden_size, num_class=num_classes, 
-							seq_len=seq_len)
+							seq_len=seq_len, num_layers=num_layers, 
+							dropout=dropout)
 
 	elif model_name == 'wordembedding':
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
