@@ -4,10 +4,14 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from torch.nn import functional as F
+from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 import numpy as np
 
+__all__ = ['attention_model']
+
 class AttentionModel(torch.nn.Module):
-	def __init__(self, batch_size, num_class, hidden_size, vocab_size, embedding_length, weights=None):
+	def __init__(self, batch_size, num_class, hidden_size, vocab_size, seq_len,
+				 embedding_length, weights=None):
 		super(AttentionModel, self).__init__()
 		
 		"""
@@ -28,6 +32,7 @@ class AttentionModel(torch.nn.Module):
 		self.num_class = num_class
 		self.hidden_size = hidden_size
 		self.vocab_size = vocab_size
+		self.seq_len = seq_len
 		self.embedding_length = embedding_length
 		
 		self.word_embeddings = nn.Embedding(vocab_size, embedding_length)
@@ -36,9 +41,11 @@ class AttentionModel(torch.nn.Module):
 			self.word_embeddings.weights = \
 				nn.Parameter(weights, requires_grad=False)
 				
-		self.lstm = nn.LSTM(embedding_length, hidden_size)
+		self.lstm = nn.LSTM(embedding_length, hidden_size, batch_first=True)
 		self.label = nn.Linear(hidden_size, num_class)
 		#self.attn_fc_layer = nn.Linear()
+
+		self._init_weights()
 		
 	def attention_net(self, lstm_output, final_state):
 
@@ -66,20 +73,40 @@ class AttentionModel(torch.nn.Module):
 		"""
 		
 		hidden = final_state.squeeze(0)
+		lstm_output = lstm_output.permute(1, 0, 2)
 		attn_weights = torch.bmm(lstm_output, hidden.unsqueeze(2)).squeeze(2)
 		soft_attn_weights = F.softmax(attn_weights, 1)
-		new_hidden_state = torch.bmm(lstm_output.transpose(1, 2), soft_attn_weights.unsqueeze(2)).squeeze(2)
+		new_hidden_state = torch.bmm(
+			lstm_output.transpose(1, 2), 
+			soft_attn_weights.unsqueeze(2)).squeeze(2)
 		
 		return new_hidden_state
+
+
+	def _init_weights(self):
+
+		for m in self.parameters():
+
+			if type(m) == type(nn.Linear):
+				m.weight.data.uniform_(-.5, .5)
+				m.bias.data.fill(0)
+
+			elif type(m) == type(nn.Embedding):
+				m.weight.data.uniform_(-.5, .5)
+
+			elif type(m) == type(nn.LSTM):
+				m.weight.data.uniform_(-.5, .5)
+				m.bias.data.fill(0)				
+
 	
-	def forward(self, input_sentences, batch_size=None):
+	def forward(self, input_sentences, input_lengths):
 	
 		""" 
 		Parameters
 		----------
 		input_sentence: input_sentence of shape = (batch_size, num_sequences)
-		batch_size : default = None. Used only for prediction on a single sentence after training (batch_size = 1)
-		
+		input_length: The original length of each sequence
+
 		Returns
 		-------
 		Output of the linear layer containing logits for pos & neg class which receives its input as the new_hidden_state which is basically the output of the Attention network.
@@ -88,7 +115,9 @@ class AttentionModel(torch.nn.Module):
 		"""
 		
 		input = self.word_embeddings(input_sentences)
-		input = input.permute(1, 0, 2)
+		input = pack_padded_sequence(input, input_lengths)
+		# input = input.permute(1, 0, 2)
+		
 		# if batch_size is None:
 		# 	h_0 = Variable(torch.zeros(1, self.batch_size, self.hidden_size).cuda())
 		# 	c_0 = Variable(torch.zeros(1, self.batch_size, self.hidden_size).cuda())
@@ -97,8 +126,9 @@ class AttentionModel(torch.nn.Module):
 		# 	c_0 = Variable(torch.zeros(1, batch_size, self.hidden_size).cuda())
 		
 		output, (final_hidden_state, final_cell_state) = self.lstm(input)
+		output, _ = pad_packed_sequence(output, total_length=self.seq_len)
 		# output, (final_hidden_state, final_cell_state) = self.lstm(input, (h_0, c_0)) # final_hidden_state.size() = (1, batch_size, hidden_size) 
-		output = output.permute(1, 0, 2) # output.size() = (batch_size, num_seq, hidden_size)
+		# output = output.permute(1, 0, 2) # output.size() = (batch_size, num_seq, hidden_size)
 		
 		attn_output = self.attention_net(output, final_hidden_state)
 		logits = self.label(attn_output)
