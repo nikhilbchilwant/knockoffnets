@@ -34,6 +34,10 @@ __maintainer__ = "Tribhuvanesh Orekondy"
 __email__ = "orekondy@mpi-inf.mpg.de"
 __status__ = "Development"
 
+class TransferSet(object):
+    def __init__(self, num_classes, data_batches):
+        self.num_classes = num_classes
+        self.data = data_batches
 
 class RandomAdversary(object):
     def __init__(self, blackbox, queryset, batch_size=16):
@@ -44,7 +48,7 @@ class RandomAdversary(object):
         self.batch_size = batch_size
         self.idx_set = set()
 
-        self.transferset = []  # List of tuples [(text tensor, label)]
+        self.transferset = TransferSet(len(self.queryset.get_labels()), None)  # List of tuples [(text tensor, label)]
 
         self._restart()
 
@@ -54,65 +58,34 @@ class RandomAdversary(object):
         torch.cuda.manual_seed(cfg.DEFAULT_SEED)
 
         self.idx_set = set(range(len(self.queryset)))
-        self.transferset = []
+        self.transferset = TransferSet(len(self.queryset.get_labels()), None)
 
     def get_transferset(self, budget):
 
         sampler = torch.utils.data.RandomSampler(self.queryset, replacement=True, num_samples=budget)
         count = 0
         # selected_element_indices = np.random.choice(len(self.queryset), budget)
+
         with tqdm(total=budget) as pbar:
             # while budget>0:
             #     current_batch_size = self.batch_size
             #     if budget < self.batch_size:
             #         current_batch_size = budget
-
+            batch_data = []
             data = DataLoader(self.queryset, batch_size=self.batch_size, collate_fn=model_utils.generate_batch, sampler=sampler)
             for i, (text, offsets, label) in enumerate(data):
                 query_prediction_probabilities = self.blackbox(text, offsets)
-                offsets = torch.cat((offsets, torch.tensor([len(text)-1])), dim=0)
-
-                for sample_index in range(0, len(query_prediction_probabilities)):
-                    self.transferset.append((text.narrow(0, offsets[sample_index],
-                                                         offsets[sample_index + 1] - offsets[sample_index] + 1),
-                                             query_prediction_probabilities[sample_index]))
-
+                # offsets = torch.cat((offsets, torch.tensor([len(text)-1])), dim=0)
+                labels = query_prediction_probabilities.argmax(1)
+                # for sample_index in range(0, len(query_prediction_probabilities)):
+                #     self.transferset.append((text.narrow(0, offsets[sample_index],
+                #                                          offsets[sample_index + 1] - offsets[sample_index] + 1), offsets,
+                #                              query_prediction_probabilities[sample_index]))
+                batch_data.append((text, offsets, labels))
                 count = count + len(label)
                 pbar.update(count)
 
-            # budget = budget - self.batch_size
-            #     count = count + current_batch_size
-            # pbar.update(count)
-                # with tqdm(total=budget) as pbar:
-                #     for t, B in enumerate(range(start_B, end_B, self.batch_size)):
-                #         idxs = np.random.choice(list(self.idx_set), replace=False,
-                #                                 size=min(self.batch_size, budget - len(self.transferset)))
-                #         self.idx_set = self.idx_set - set(idxs)
-                #
-                #         if len(self.idx_set) == 0:
-                #             print('=> Query set exhausted. Now repeating input examples.')
-                #             self.idx_set = set(range(len(self.queryset)))
-                #
-                #         x_t = torch.stack([self.queryset[i][0] for i in idxs]).to(self.blackbox.device)
-                #         y_t = self.blackbox(x_t).cpu()
-                #
-                #         if hasattr(self.queryset, 'samples'):
-                #             # Any DatasetFolder (or subclass) has this attribute
-                #             # Saving image paths are space-efficient
-                #             img_t = [self.queryset.samples[i][0] for i in idxs]  # Image paths
-                #         else:
-                #             # Otherwise, store the image itself
-                #             # But, we need to store the non-transformed version
-                #             img_t = [self.queryset.data[i] for i in idxs]
-                #             if isinstance(self.queryset.data[0], torch.Tensor):
-                #                 img_t = [x.numpy() for x in img_t]
-                #
-                #         for i in range(x_t.size(0)):
-                #             img_t_i = img_t[i].squeeze() if isinstance(img_t[i], np.ndarray) else img_t[i]
-                #             self.transferset.append((img_t_i, y_t[i].cpu().squeeze()))
-                #
-                #         pbar.update(x_t.size(0))
-
+        self.transferset.data = batch_data
         return self.transferset
 
 
@@ -204,7 +177,7 @@ def main():
     transferset = adversary.get_transferset(params['budget'])
     with open(transfer_out_path, 'wb') as wf:
         pickle.dump(transferset, wf)
-    print('=> transfer set ({} samples) written to: {}'.format(len(transferset), transfer_out_path))
+    print('=> transfer set ({} samples) written to: {}'.format(len(transferset.data), transfer_out_path))
 
     # Store arguments
     params['created_on'] = str(datetime.now())

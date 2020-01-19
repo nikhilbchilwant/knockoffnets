@@ -21,7 +21,7 @@ import knockoff.utils.model as model_utils
 from knockoff import datasets
 import knockoff.models.zoo as zoo
 from torchtext.datasets import text_classification
-
+from knockoff.adversary.transfer import TransferSet
 
 __author__ = "Tribhuvanesh Orekondy"
 __maintainer__ = "Tribhuvanesh Orekondy"
@@ -127,7 +127,7 @@ def main():
     parser.add_argument('--pretrained', type=str, help='Use pretrained network', default=None)
     parser.add_argument('--weighted-loss', action='store_true', help='Use a weighted loss', default=False)
     # Attacker's defense
-    parser.add_argument('--argmaxed', action='store_true', help='Only consider argmax labels', default=False)
+    parser.add_argument('--argmaxed', action='store_true', help='Only consider argmax labels', default=True)
     parser.add_argument('--optimizer_choice', type=str, help='Optimizer', default='sgdm', choices=('sgd', 'sgdm', 'adam', 'adagrad'))
     parser.add_argument('--datadir', default='.data', help='data directory (default=.data)')
     parser.add_argument('--embed-dim', type=int, default=32,
@@ -150,21 +150,21 @@ def main():
     transferset_path = osp.join(model_dir, 'transferset.pickle')
     with open(transferset_path, 'rb') as rf:
         transferset_samples = pickle.load(rf)
-    num_classes = transferset_samples[0][1].size(0)
-    print('=> found transfer set with {} samples, {} classes'.format(len(transferset_samples), num_classes))
+    num_classes = transferset_samples.num_classes
+    print('=> found transfer set with {} samples, {} classes'.format(len(transferset_samples.data), num_classes))
 
 
     # ----------- Clean up transfer (if necessary)
-    if params['argmaxed']:
-        new_transferset_samples = []
-        print('=> Using argmax labels (instead of posterior probabilities)')
-        for i in range(len(transferset_samples)):
-            x_i, y_i = transferset_samples[i]
-            argmax_k = y_i.argmax()
-            y_i_1hot = torch.zeros_like(y_i)
-            y_i_1hot[argmax_k] = 1.
-            new_transferset_samples.append((x_i, y_i_1hot))
-        transferset_samples = new_transferset_samples
+    # if params['argmaxed']:
+    #     new_transferset_samples = []
+    #     print('=> Using argmax labels (instead of posterior probabilities)')
+    #     for i in range(len(transferset_samples)):
+    #         x_i, y_i = transferset_samples[i]
+    #         argmax_k = y_i.argmax()
+    #         # y_i_1hot = torch.zeros_like(y_i)
+    #         # y_i_1hot[argmax_k] = 1.
+    #         new_transferset_samples.append((x_i, argmax_k))
+    #     transferset_samples = new_transferset_samples
     # ----------- Set up testset
     dataset_name = params['testdataset']
     valid_datasets = datasets.__dict__.keys()
@@ -221,18 +221,13 @@ def main():
         torch.manual_seed(cfg.DEFAULT_SEED)
         torch.cuda.manual_seed(cfg.DEFAULT_SEED)
 
-        # transferset = samples_to_transferset(transferset_samples, budget=b, transform=transform)
-        # print()
-        print('=> Training at budget = {}'.format(len(transferset_samples)))
+        print('=> Training at budget = {}'.format(len(transferset_samples.data)))
 
         optimizer = get_optimizer(model.parameters(), params['optimizer_choice'], **params)
         print(params)
 
-        checkpoint_suffix = '.{}'.format(b)
-        criterion_train = model_utils.soft_cross_entropy
-        out_path = params['model_dir']
-        batch_size = 64
-        model_utils.train_and_valid(trainset, testset, model, model_name, modelfamily, out_path, device=device)
+        model_utils.train_and_valid_knockoff(transferset_samples.data, testset, model, model_name, modelfamily, device=device, **params)
+
     # Store arguments
     params['created_on'] = str(datetime.now())
     params_out_path = osp.join(model_dir, 'params_train.json')
