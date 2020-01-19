@@ -76,9 +76,9 @@ def main():
 	# 20200117 LIN,Y.D. More arguments
 	parser.add_argument('--hidden_size', type=int, default=32, metavar='N',
 						help='The hidden size for the recurrent network')
-	parser.add_argument('--num_layers', type=int, metavar='N', 
+	parser.add_argument('--num_layers', type=int, metavar='N', default=1,
 						help='The number of stack of RNN-like network')
-	parser.add_argument('--dropout', type=float, metavar='N',
+	parser.add_argument('--dropout', type=float, metavar='N', default=1,
 						help='The dropout of the network')
 
 	args = parser.parse_args()
@@ -105,7 +105,7 @@ def main():
 
 	if params['device_id'] >= 0:
 		os.environ["CUDA_VISIBLE_DEVICES"] = str(params['device_id'])
-		device = torch.device('cuda:'+ params['device_id'])
+		device = torch.device('cuda')
 	else:
 		device = torch.device('cpu')
 
@@ -154,6 +154,15 @@ def main():
 							seq_len=seq_len, num_layers=num_layers, 
 							dropout=dropout)
 
+	elif model_name == 'self_attention':
+
+		seq_len = count_seqlen([trainset, testset])
+		
+		model = zoo.get_net(model_name, modelfamily, pretrained, 
+							vocab_size=vocab_size, embed_dim=embed_dim,
+							hidden_size=hidden_size, num_class=num_classes, 
+							seq_len=seq_len)
+
 	elif model_name == 'wordembedding':
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
@@ -161,7 +170,7 @@ def main():
 	model = model.to(device)
 
 	# 20200117 LIN,Y.D. Conditions for different models
-	if model_name == 'attention_model':
+	if model_name in ['attention_model', 'self_attention']:
 		optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 		scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=lr_gamma)
 		criterion = nn.CrossEntropyLoss(reduction='mean')
