@@ -30,16 +30,30 @@ def generate_batch(batch):
 	return text, offsets, label
 
 
-def train_and_valid(trainset, testset, model, model_name, modelfamily, out_path, batch_size, lr, lr_gamma, num_workers,
+def generate_batch_for_var_length(batch):
+
+	label = torch.tensor([entry[0] for entry in batch])
+	text = [entry[1] for entry in batch]
+	padded_text = pad_sequence(text, padding_value=1)
+	text_lengths = torch.tensor(
+		sorted([len(t) for t in text], reverse=True))
+
+	return padded_text, text_lengths, label
+
+
+def train_and_valid(trainset, testset, model, model_name, modelfamily, 
+					out_path, batch_size, optimizer, scheduler, criterion, 
+					lr, lr_gamma, num_workers, collate_fn, 
 					num_epochs=5, device='cpu'):
 	if not osp.exists(out_path):
 		knockoff_utils.create_dir(out_path)
 
-	optimizer = torch.optim.SGD(model.parameters(), lr=lr)
-	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=lr_gamma)
-	criterion = nn.CrossEntropyLoss(reduction='mean')
+	# 20200118 LIN,Y.D. Optimzer, scheduler and criterion shouldn't be fixed.
+	# optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+	# scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=lr_gamma)
+	# criterion = nn.CrossEntropyLoss(reduction='mean')
 	train_data = DataLoader(trainset, batch_size=batch_size, shuffle=True,
-							collate_fn=generate_batch, num_workers=num_workers)
+							collate_fn=collate_fn, num_workers=num_workers)
 	num_lines = num_epochs * len(train_data)
 
 	best_test_acc, test_acc = -1., -1.
@@ -51,15 +65,20 @@ def train_and_valid(trainset, testset, model, model_name, modelfamily, out_path,
 			columns = ['run_id', 'epoch', 'training loss', 'test accuracy', 'best_accuracy']
 			wf.write('\t'.join(columns) + '\n')
 
-	model_out_path = osp.join(out_path, 'checkpoint-{}-{}.pth.tar'.format(model_name, modelfamily))
+	model_out_path = osp.join(out_path, 
+		'checkpoint-{}-{}.pth.tar'.format(model_name, modelfamily))
 
 	for epoch in range(num_epochs):
 
-		for i, (text, offsets, cls) in enumerate(train_data):
+		total = 0
+		train_acc = 0
+
+		for i, (text, textmeta, lbl) in enumerate(train_data):
 			optimizer.zero_grad()
-			text, offsets, cls = text.to(device), offsets.to(device), cls.to(device)
-			output = model(text, offsets)
-			train_loss = criterion(output, cls)
+			text, textmeta, lbl = \
+				text.to(device), textmeta.to(device), lbl.to(device)
+			output = model(text, textmeta)
+			train_loss = criterion(output, lbl)
 			train_loss.backward()
 			optimizer.step()
 			processed_lines = i + len(train_data) * epoch
@@ -69,11 +88,17 @@ def train_and_valid(trainset, testset, model, model_name, modelfamily, out_path,
 					"\rTraining progress: {:3.0f}% lr: {:3.3f} loss: {:3.3f}".format(
 						progress * 100, scheduler.get_lr()[0], train_loss))
 
+			_, pred = torch.max(output.data, 1)
+			train_acc += (lbl == pred).sum().item()
+			total += len(lbl)
+
 		scheduler.step()
+		train_acc /= total
 
 		print("")
-		test_acc = test(model, testset)
+		test_acc = test(model, testset, batch_size, collate_fn, device)
 		best_test_acc = max(best_test_acc, test_acc)
+		print("Train - Accuracy: {}".format(train_acc))
 		print("Test - Accuracy: {}".format(test_acc))
 
 		if test_acc >= best_test_acc:
@@ -94,14 +119,14 @@ def train_and_valid(trainset, testset, model, model_name, modelfamily, out_path,
 			af.write('\t'.join([str(c) for c in data_column]) + '\n')
 
 
-def test(model, test_data, batch_size=16, device='cpu'):
-	data = DataLoader(test_data, batch_size=batch_size, collate_fn=generate_batch)
+def test(model, test_data, batch_size, collate_fn, device='cpu'):
+	data = DataLoader(test_data, batch_size=batch_size, collate_fn=collate_fn)
 	total_accuracy = []
-	for text, offsets, cls in data:
-		text, offsets, cls = text.to(device), offsets.to(device), cls.to(device)
+	for text, textmeta, lbl in data:
+		text, textmeta, lbl = text.to(device), textmeta.to(device), lbl.to(device)
 		with torch.no_grad():
-			output = model(text, offsets)
-			accuracy = (output.argmax(1) == cls).float().mean().item()
+			output = model(text, textmeta)
+			accuracy = (output.argmax(1) == lbl).float().mean().item()
 			total_accuracy.append(accuracy)
 
 	if total_accuracy == []:

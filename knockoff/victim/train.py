@@ -8,12 +8,14 @@ import os.path as osp
 from datetime import datetime
 
 import torch
+import torch.nn as nn
 from torchtext.datasets import text_classification
 
 import knockoff.config as cfg
 import knockoff.models.zoo as zoo
 import knockoff.utils.model as model_utils
 from knockoff import datasets
+
 
 __author__ = "Tribhuvanesh Orekondy"
 __maintainer__ = "Tribhuvanesh Orekondy"
@@ -59,6 +61,11 @@ def main():
 	parser.add_argument('--pretrained', type=str, help='Use pretrained network', default=None)
 	parser.add_argument('--weighted-loss', action='store_true', help='Use a weighted loss', default=None)
 
+
+	# 20200117 LIN,Y.D. More arguments
+	parser.add_argument('--hidden_size', type=int, default=32, metavar='N',
+						help='The hidden size for the recurrent network')
+
 	args = parser.parse_args()
 	params = vars(args)
 
@@ -78,7 +85,7 @@ def main():
 
 	if params['device_id'] >= 0:
 		os.environ["CUDA_VISIBLE_DEVICES"] = str(params['device_id'])
-		device = torch.device('cuda')
+		device = torch.device('cuda:'+ params['device_id'])
 	else:
 		device = torch.device('cpu')
 
@@ -117,12 +124,24 @@ def main():
 	vocab_size = len(trainset.get_vocab())
 	params['num_classes'] = len(trainset.get_labels())
 	num_classes = params['num_classes']
-
-	model = zoo.get_net(model_name, modelfamily, pretrained, vocab_size=vocab_size, embed_dim=embed_dim,
+	model = zoo.get_net(model_name, modelfamily, pretrained, 
+						vocab_size=vocab_size, embed_dim=embed_dim,
 						num_class=num_classes)
 	model = model.to(device)
-	model_utils.train_and_valid(trainset, testset, model, model_name, modelfamily, out_path, batch_size, lr, lr_gamma,
-								num_workers, device=device, num_epochs=num_epochs)
+
+	# 20200117 LIN,Y.D. Conditions for different models
+	if model_name in ['attention_model']:
+		pass
+	elif model_name == 'wordembedding':
+		optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+		scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=lr_gamma)
+		criterion = nn.CrossEntropyLoss(reduction='mean')
+		collate_fn = model_utils.generate_batch
+
+	model_utils.train_and_valid(
+		trainset, testset, model, model_name, modelfamily, 
+		out_path, batch_size, optimizer, scheduler, criterion, 
+		lr, lr_gamma, num_workers, collate_fn, num_epochs, device)
 
 	# Store arguments in json file. Maybe for the transfer set step?
 	params['created_on'] = str(datetime.now())
