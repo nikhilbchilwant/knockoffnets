@@ -120,7 +120,8 @@ def main():
 	model = zoo.get_net(model_name, modelfamily, pretrained, vocab_size=vocab_size, embed_dim=embed_dim,
 						num_class=num_classes)
 	model = model.to(device)
-	model_utils.train_and_valid(trainset, testset, model, model_name, modelfamily, out_path, batch_size=batch_size, lr=lr, lr_gamma=lr_gamma,
+	model_utils.train_and_valid(trainset, testset, model, model_name, modelfamily, out_path,
+								batch_size=batch_size, lr=lr, lr_gamma=lr_gamma,
 								num_workers=num_workers, device=device, num_epochs=num_epochs)
 
 	# Store arguments in json file. Maybe for the transfer set step?

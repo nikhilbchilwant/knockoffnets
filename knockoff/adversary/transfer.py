@@ -177,7 +177,7 @@ def main():
     transferset = adversary.get_transferset(params['budget'])
     with open(transfer_out_path, 'wb') as wf:
         pickle.dump(transferset, wf)
-    print('=> transfer set ({} samples) written to: {}'.format(len(transferset.data), transfer_out_path))
+    print('=> transfer set ({} samples) written to: {}'.format(len(transferset.data) * batch_size, transfer_out_path))
 
     # Store arguments
     params['created_on'] = str(datetime.now())

@@ -113,12 +113,11 @@ def test(model, test_data, batch_size=16, device='cpu'):
 
 	return sum(total_accuracy) / len(total_accuracy)
 
-def train_and_valid_knockoff(trainset, testset, model, model_name, model_family, batch_size=64, criterion_train=None, criterion_test=None,
-				device=None, num_workers=10, lr=0.1, momentum=0.5, lr_step=30, lr_gamma=0.1, resume=None,
-				epochs=100, log_interval=100, weighted_loss=False, checkpoint_suffix='', optimizer=None, scheduler=None, num_epochs=5,
-				**kwargs):
+def train_and_valid_knockoff(trainset, testset, model, model_name, model_family, batch_size=64, 	criterion_train=None, criterion_test=None, device=None, num_workers=10, momentum=0.5,
+	lr_step=30, resume=None, epochs=100, log_interval=100, weighted_loss=False,	checkpoint_suffix='', optimizer=None, scheduler=None, num_epochs=10,	**kwargs):
 	out_path = kwargs['model_dir']
-
+	lr = kwargs['lr']
+	lr_gamma = kwargs['lr_gamma']
 	if device is None:
 		device = torch.device('cuda')
 	if not osp.exists(out_path):
@@ -160,6 +159,7 @@ def train_and_valid_knockoff(trainset, testset, model, model_name, model_family,
 	model_out_path = osp.join(out_path, 'checkpoint-{}-{}.pth.tar'.format(model_name, model_family))
 
 	num_lines = num_epochs * len(trainset)
+	best_test_acc, test_acc = -1., -1.
 
 	for epoch in range(num_epochs):
 
@@ -180,7 +180,19 @@ def train_and_valid_knockoff(trainset, testset, model, model_name, model_family,
 		scheduler.step()
 
 		print("")
-	test_acc = test(model, testset)
-	print("Test - Accuracy: {}".format(test_acc))
+		test_acc = test(model, testset)
+		best_test_acc = max(best_test_acc, test_acc)
+		print("Test - Accuracy: {}".format(test_acc))
+
+		if test_acc >= best_test_acc:
+			state = {
+				'epoch': epoch,
+				'arch': model.__class__,
+				'state_dict': model.state_dict(),
+				'best_acc': test_acc,
+				'optimizer': optimizer.state_dict(),
+				'created_on': str(datetime.now()),
+			}
+			torch.save(state, model_out_path)
 
 	return model
