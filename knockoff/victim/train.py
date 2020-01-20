@@ -130,6 +130,5 @@ def main():
 	with open(params_out_path, 'w') as jf:
 		json.dump(params, jf, indent=True)
 
-
 if __name__ == '__main__':
 	main()

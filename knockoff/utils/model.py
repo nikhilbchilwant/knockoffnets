@@ -114,10 +114,11 @@ def test(model, test_data, batch_size=16, device='cpu'):
 	return sum(total_accuracy) / len(total_accuracy)
 
 def train_and_valid_knockoff(trainset, testset, model, model_name, model_family, batch_size=64, 	criterion_train=None, criterion_test=None, device=None, num_workers=10, momentum=0.5,
-	lr_step=30, resume=None, epochs=100, log_interval=100, weighted_loss=False,	checkpoint_suffix='', optimizer=None, scheduler=None, num_epochs=10,	**kwargs):
+	lr_step=30, resume=None, log_interval=100, weighted_loss=False,	checkpoint_suffix='', optimizer=None, scheduler=None, **kwargs):
 	out_path = kwargs['model_dir']
 	lr = kwargs['lr']
 	lr_gamma = kwargs['lr_gamma']
+	num_epochs = kwargs['epochs']
 	if device is None:
 		device = torch.device('cuda')
 	if not osp.exists(out_path):
