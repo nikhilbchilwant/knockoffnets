@@ -100,6 +100,7 @@ def train_and_valid(trainset, testset, model, model_name, modelfamily,
 
 		test_acc, test_loss = test(model, criterion, testset, batch_size, collate_fn, device)
 		best_test_acc = max(best_test_acc, test_acc)
+		print("")
 		print("Train acc: {:3.3f}, Train loss: {:3.3f}, Valid acc: {:3.3f}, Valid loss: {:3.3f}".format(
 			train_acc, train_loss, test_acc, test_loss))
 		
