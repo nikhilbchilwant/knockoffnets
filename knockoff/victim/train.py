@@ -163,7 +163,7 @@ def main():
 							seq_len=seq_len, num_layers=num_layers, 
 							dropout=dropout)
 
-	elif model_name == 'self_attention':
+	elif model_name in ['self_attention', 'rcnn']:
 
 		seq_len = count_seqlen([trainset, validset])
 		
@@ -176,10 +176,12 @@ def main():
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
 							num_class=num_classes)
+
+
 	model = model.to(device)
 
 	# 20200117 LIN,Y.D. Conditions for different models
-	if model_name in ['attention_model', 'self_attention']:
+	if model_name in ['attention_model', 'self_attention', 'rcnn']:
 		optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 		scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=lr_gamma)
 		criterion = nn.CrossEntropyLoss(reduction='mean')
