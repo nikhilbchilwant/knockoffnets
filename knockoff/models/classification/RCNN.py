@@ -39,6 +39,24 @@ class RCNN(nn.Module):
 							dropout=self.dropout, bidirectional=True)
 		self.W2 = nn.Linear(2*hidden_size+embed_dim, hidden_size)
 		self.label = nn.Linear(hidden_size, output_size)
+
+		self._init_weights()
+
+
+	def _init_weights(self):
+
+		for m in self.parameters():
+
+			if type(m) == type(nn.Linear):
+				m.weight.data.uniform_(-.5, .5)
+				m.bias.data.fill(0)
+
+			elif type(m) == type(nn.Embedding):
+				m.weight.data.uniform_(-.5, .5)
+
+			elif type(m) == type(nn.LSTM):
+				m.weight.data.uniform_(-.5, .5)
+				m.bias.data.fill(0)
 		
 	def forward(self, input_sentence, input_lengths):
 	
