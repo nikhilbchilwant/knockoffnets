@@ -74,6 +74,8 @@ def main():
 
 
 	# 20200117 LIN,Y.D. More arguments
+	parser.add_argument('--train_valid_split', type=float, default=.1, metavar='N',
+						help='The friction of train and validation dataset.')
 	parser.add_argument('--hidden_size', type=int, default=32, metavar='N',
 						help='The hidden size for the recurrent network')
 	parser.add_argument('--num_layers', type=int, metavar='N', default=1,
@@ -97,6 +99,7 @@ def main():
 	num_epochs = params['epochs']
 	model_name = params['model_arch']
 	pretrained = params['pretrained']
+	train_valid_split = params['train_valid_split']
 
 	# 20200119 LIN, Y.D.
 	hidden_size = params['hidden_size']
@@ -140,14 +143,20 @@ def main():
 		print("Loading test data from {}".format(test_data_path))
 		testset = torch.load(test_data_path)
 
+	
 	# Extract variables for model from the dataset
 	vocab_size = len(trainset.get_vocab())
 	params['num_classes'] = len(trainset.get_labels())
 	num_classes = params['num_classes']
 
+	# Add train validation split.
+	validset_num = int(train_valid_split*len(trainset))
+	validset = trainset[:validset_num]
+	trainset = trainset[validset_num:]
+
 	if model_name == 'attention_model':
 
-		seq_len = count_seqlen([trainset, testset])
+		seq_len = count_seqlen([trainset, validset])
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
 							hidden_size=hidden_size, num_class=num_classes, 
@@ -156,7 +165,7 @@ def main():
 
 	elif model_name == 'self_attention':
 
-		seq_len = count_seqlen([trainset, testset])
+		seq_len = count_seqlen([trainset, validset])
 		
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
@@ -182,10 +191,18 @@ def main():
 		criterion = nn.CrossEntropyLoss(reduction='mean')
 		collate_fn = model_utils.generate_batch
 
+	print('Start the training and validation process:')
+	print('')
 	model_utils.train_and_valid(
-		trainset, testset, model, model_name, modelfamily, 
+		trainset, validset, model, model_name, modelfamily, 
 		out_path, batch_size, optimizer, scheduler, criterion, 
 		lr, lr_gamma, num_workers, collate_fn, num_epochs, device)
+
+	print('Start the testing process:')
+	print('')
+	test_acc, test_loss = model_utils.test(
+		model, criterion, testset, batch_size, collate_fn, device)
+	print('Test acc: {:3.3f}, Test loss: {:3.3f}'.format(test_acc, test_loss))
 
 	# Store arguments in json file. Maybe for the transfer set step?
 	params['created_on'] = str(datetime.now())
