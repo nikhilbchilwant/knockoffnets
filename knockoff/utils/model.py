@@ -122,6 +122,10 @@ def train_and_valid(trainset, testset, model, model_name, modelfamily,
 			data_column = [run_id, epoch, train_loss.item(), test_acc, best_test_acc]
 			af.write('\t'.join([str(c) for c in data_column]) + '\n')
 
+	# Select the best model for prediction
+	print('Select the model from epoch {}'.format(state['epoch']))
+	model.load_state_dict(state['state_dict'])
+
 
 def test(model, criterion, test_data, batch_size, collate_fn, device='cpu'):
 	data = DataLoader(test_data, batch_size=batch_size, collate_fn=collate_fn)
