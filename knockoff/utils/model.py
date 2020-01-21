@@ -10,6 +10,8 @@ from datetime import datetime
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from torch.nn.utils.rnn import pad_sequence
+from tqdm import tqdm
 
 import knockoff.utils.utils as knockoff_utils
 
@@ -48,13 +50,10 @@ def train_and_valid(trainset, testset, model, model_name, modelfamily,
 	if not osp.exists(out_path):
 		knockoff_utils.create_dir(out_path)
 
-	# 20200118 LIN,Y.D. Optimzer, scheduler and criterion shouldn't be fixed.
-	# optimizer = torch.optim.SGD(model.parameters(), lr=lr)
-	# scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=lr_gamma)
-	# criterion = nn.CrossEntropyLoss(reduction='mean')
 	train_data = DataLoader(trainset, batch_size=batch_size, shuffle=True,
 							collate_fn=collate_fn, num_workers=num_workers)
 	num_lines = num_epochs * len(train_data)
+	pbar = tqdm(total=num_lines)
 
 	best_test_acc, test_acc = -1., -1.
 
@@ -73,6 +72,8 @@ def train_and_valid(trainset, testset, model, model_name, modelfamily,
 		total = 0
 		train_acc = 0
 
+		model.train()
+
 		for i, (text, textmeta, lbl) in enumerate(train_data):
 			optimizer.zero_grad()
 			text, textmeta, lbl = \
@@ -81,12 +82,14 @@ def train_and_valid(trainset, testset, model, model_name, modelfamily,
 			train_loss = criterion(output, lbl)
 			train_loss.backward()
 			optimizer.step()
-			processed_lines = i + len(train_data) * epoch
-			progress = processed_lines / float(num_lines)
-			if processed_lines % 128 == 0:
-				sys.stderr.write(
-					"\rTraining progress: {:3.0f}% lr: {:3.3f} loss: {:3.3f}".format(
-						progress * 100, scheduler.get_lr()[0], train_loss))
+			pbar.update(1)
+
+			# processed_lines = i + len(train_data) * epoch
+			# progress = processed_lines / float(num_lines)
+			# if processed_lines % 128 == 0:
+			# 	sys.stderr.write(
+			# 		"\rTraining progress: {:3.0f}% lr: {:3.5f} loss: {:3.3f}".format(
+			# 			progress * 100, scheduler.get_lr()[0], train_loss))
 
 			_, pred = torch.max(output.data, 1)
 			train_acc += (lbl == pred).sum().item()
@@ -95,11 +98,11 @@ def train_and_valid(trainset, testset, model, model_name, modelfamily,
 		scheduler.step()
 		train_acc /= total
 
-		print("")
-		test_acc = test(model, testset, batch_size, collate_fn, device)
+		test_acc, test_loss = test(model, criterion, testset, batch_size, collate_fn, device)
 		best_test_acc = max(best_test_acc, test_acc)
-		print("Train - Accuracy: {}".format(train_acc))
-		print("Test - Accuracy: {}".format(test_acc))
+		print("Train acc: {:3.3f}, Train loss: {:3.3f}, Test acc: {:3.3f}, Test loss: {:3.3f}".format(
+			train_acc, train_loss, test_acc, test_loss))
+		
 
 		if test_acc >= best_test_acc:
 			state = {
@@ -119,17 +122,23 @@ def train_and_valid(trainset, testset, model, model_name, modelfamily,
 			af.write('\t'.join([str(c) for c in data_column]) + '\n')
 
 
-def test(model, test_data, batch_size, collate_fn, device='cpu'):
+def test(model, criterion, test_data, batch_size, collate_fn, device='cpu'):
 	data = DataLoader(test_data, batch_size=batch_size, collate_fn=collate_fn)
 	total_accuracy = []
+	test_loss = .0
+	model.eval()
 	for text, textmeta, lbl in data:
 		text, textmeta, lbl = text.to(device), textmeta.to(device), lbl.to(device)
 		with torch.no_grad():
 			output = model(text, textmeta)
+			loss = criterion(output, lbl)
 			accuracy = (output.argmax(1) == lbl).float().mean().item()
 			total_accuracy.append(accuracy)
+			test_loss += loss.item()
 
 	if total_accuracy == []:
 		return 0.0
 
-	return sum(total_accuracy) / len(total_accuracy)
+	test_acc = sum(total_accuracy) / len(total_accuracy)
+	test_loss /= len(data)
+	return test_acc, test_loss
