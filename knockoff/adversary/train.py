@@ -83,8 +83,7 @@ def main():
 
 	args = parser.parse_args()
 	params = vars(args)
-	print('WTF is params?')
-	print(params)
+	
 	torch.manual_seed(cfg.DEFAULT_SEED)
 	if params['device_id'] >= 0:
 		os.environ["CUDA_VISIBLE_DEVICES"] = str(params['device_id'])
