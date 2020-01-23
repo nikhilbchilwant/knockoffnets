@@ -1,3 +1,5 @@
+from torchtext.datasets import text_classification
+
 dataset_to_modelfamily = {
 
 	### TextClassificationDataset
