@@ -9,14 +9,14 @@ from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 __all__ = ['rcnn']
 
 class RCNN(nn.Module):
-	def __init__(self, num_class, hidden_size, 
+	def __init__(self, num_classes, hidden_size, 
 				 vocab_size, seq_len, embed_dim, weights=None):
 		super(RCNN, self).__init__()
 		
 		"""
 		Arguments
 		---------
-		num_class : 2 = (pos, neg)
+		num_classes : 2 = (pos, neg)
 		hidden_sie : Size of the hidden_state of the LSTM
 		vocab_size : Size of the vocabulary containing unique words
 		embed_dim : Embedding dimension of GloVe word embeddings
@@ -24,7 +24,7 @@ class RCNN(nn.Module):
 		
 		"""
 		
-		self.num_class = num_class
+		self.num_classes = num_classes
 		self.hidden_size = hidden_size
 		self.vocab_size = vocab_size
 		self.embed_dim = embed_dim
@@ -38,7 +38,7 @@ class RCNN(nn.Module):
 		self.lstm = nn.LSTM(embed_dim, hidden_size, batch_first=True,
 							dropout=self.dropout, bidirectional=True)
 		self.W2 = nn.Linear(2*hidden_size+embed_dim, hidden_size)
-		self.label = nn.Linear(hidden_size, num_class)
+		self.label = nn.Linear(hidden_size, num_classes)
 
 		self._init_weights()
 
@@ -69,7 +69,7 @@ class RCNN(nn.Module):
 		Returns
 		-------
 		Output of the linear layer containing logits for positive & negative class which receives its input as the final_hidden_state of the LSTM
-		final_output.shape = (batch_size, num_class)
+		final_output.shape = (batch_size, num_classes)
 		
 		"""
 		
