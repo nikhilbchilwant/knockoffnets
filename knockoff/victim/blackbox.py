@@ -58,6 +58,10 @@ class Blackbox(object):
 
 		if model_arch == 'self_attention':
 			from knockoff.victim.blackbox_config import SELF_ATTENTION_CONFIG as config
+		elif model_arch == 'attention_model':
+			from knockoff.victim.blackbox_config import ATTENTION_CONFIG as config
+		elif model_arch == 'rcnn':
+			from knockoff.victim.blackbox_config import RCNN_CONFIG as config
 		elif model_arch == 'wordembedding':
 			pass
 		else:
