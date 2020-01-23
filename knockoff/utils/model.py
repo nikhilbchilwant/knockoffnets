@@ -153,8 +153,11 @@ def test(model, criterion, test_data, batch_size, collate_fn, device='cpu'):
 	return test_acc, test_loss
 
 
-def train_and_valid_knockoff(trainset, testset, model, model_name, model_family, batch_size=64, 	criterion_train=None, criterion_test=None, device=None, num_workers=10, momentum=0.5,
-	lr_step=30, resume=None, log_interval=100, weighted_loss=False,	checkpoint_suffix='', optimizer=None, scheduler=None, **kwargs):
+def train_and_valid_knockoff(trainset, testset, model, model_name, model_family, 
+							 batch_size=64, device=None, num_workers=10, collate_fn=generate_batch,
+							 optimizer=None, criterion=None, scheduler=None, checkpoint_suffix='', 
+							 **kwargs):
+
 	out_path = kwargs['model_dir']
 	lr = kwargs['lr']
 	lr_gamma = kwargs['lr_gamma']
@@ -168,34 +171,29 @@ def train_and_valid_knockoff(trainset, testset, model, model_name, model_family,
 	# Data loaders
 	# trainset = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 	if testset is not None:
-		test_loader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+		test_loader = DataLoader(testset, batch_size=batch_size, shuffle=False, 
+								 num_workers=num_workers, collate_fn=collate_fn)
 	else:
 		test_loader = None
 
-	if weighted_loss:
-		if not isinstance(trainset.samples[0][1], int):
-			print('Labels in trainset is of type: {}. Expected: {}.'.format(type(trainset.samples[0][1]), int))
+	# if weighted_loss:
+	# 	if not isinstance(trainset.samples[0][1], int):
+	# 		print('Labels in trainset is of type: {}. Expected: {}.'.format(
+	# 			type(trainset.samples[0][1]), int))
 
-		class_to_count = dd(int)
-		for _, y in trainset.samples:
-			class_to_count[y] += 1
-		class_sample_count = [class_to_count[c] for c, cname in enumerate(trainset.classes)]
-		print('=> counts per class: ', class_sample_count)
-		weight = np.min(class_sample_count) / torch.Tensor(class_sample_count)
-		weight = weight.to(device)
-		print('=> using weights: ', weight)
-	else:
-		weight = None
+	# 	class_to_count = dd(int)
+	# 	for _, y in trainset.samples:
+	# 		class_to_count[y] += 1
+	# 	class_sample_count = [class_to_count[c] for c, cname in enumerate(trainset.classes)]
+	# 	print('=> counts per class: ', class_sample_count)
+	# 	weight = np.min(class_sample_count) / torch.Tensor(class_sample_count)
+	# 	weight = weight.to(device)
+	# 	print('=> using weights: ', weight)
+	# else:
+	# 	weight = None
 
-	# Optimizer
-	if criterion_train is None:
-		criterion = nn.CrossEntropyLoss(reduction='mean')
-	if criterion_test is None:
-		criterion = nn.CrossEntropyLoss(reduction='mean')
-	if optimizer is None:
-		optimizer = torch.optim.SGD(model.parameters(), lr=lr)
-	if scheduler is None:
-		scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=lr_gamma)
+	num_lines = num_epochs * len(trainset)
+	pbar = tqdm(total=num_lines)
 
 	model_out_path = osp.join(out_path, 'checkpoint-{}-{}.pth.tar'.format(model_name, model_family))
 
@@ -204,26 +202,33 @@ def train_and_valid_knockoff(trainset, testset, model, model_name, model_family,
 
 	for epoch in range(num_epochs):
 
-		for i, (text, offsets, cls) in enumerate(trainset):
+		total = 0
+		train_acc = .0
+		model.train()
+
+		for i, (text, textmeta, lbl) in enumerate(trainset):
 			optimizer.zero_grad()
-			text, offsets, cls = text.to(device), offsets.to(device), cls.to(device)
-			output = model(text, offsets)
-			train_loss = criterion(output, cls)
+			text, textmeta, lbl = text.to(device), textmeta.to(device), lbl.to(device)
+			output = model(text, textmeta)
+			train_loss = criterion(output, lbl)
 			train_loss.backward()
 			optimizer.step()
-			processed_lines = i + len(trainset) * epoch
-			progress = processed_lines / float(num_lines)
-			if processed_lines % 128 == 0:
-				sys.stderr.write(
-					"\rTraining progress: {:3.0f}% lr: {:3.3f} loss: {:3.3f}".format(
-						progress * 100, scheduler.get_lr()[0], train_loss))
+			pbar.update(1)
+			_, pred = torch.max(output.data, 1)
+			train_acc += (lbl == pred).sum().item()
+			total += len(lbl)
+
+		print('wtf total is:', total)			
 
 		scheduler.step()
-
-		print("")
-		test_acc = test(model, testset)
+		train_acc /= total
+		train_loss = train_loss.item()
+		test_acc, test_loss = test(model, criterion, testset, batch_size, collate_fn, device)
 		best_test_acc = max(best_test_acc, test_acc)
-		print("Test - Accuracy: {}".format(test_acc))
+
+		print("Train acc: {:3.3f}, Train loss: {:3.3f}, Valid acc: {:3.3f}, Valid loss: {:3.3f}".format(
+			train_acc, train_loss, test_acc, test_loss))
+		print("")
 
 		if test_acc >= best_test_acc:
 			state = {
