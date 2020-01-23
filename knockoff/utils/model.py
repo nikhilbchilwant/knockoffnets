@@ -218,8 +218,6 @@ def train_and_valid_knockoff(trainset, testset, model, model_name, model_family,
 			train_acc += (lbl == pred).sum().item()
 			total += len(lbl)
 
-		print('wtf total is:', total)			
-
 		scheduler.step()
 		train_acc /= total
 		train_loss = train_loss.item()
