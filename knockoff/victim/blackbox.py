@@ -21,6 +21,7 @@ from knockoff.utils.type_checks import TypeCheck
 import knockoff.utils.model as model_utils
 import knockoff.models.zoo as zoo
 from knockoff import datasets
+from knockoff.victim.blackbox_config import get_params
 
 __author__ = "Tribhuvanesh Orekondy"
 __maintainer__ = "Tribhuvanesh Orekondy"
@@ -29,77 +30,90 @@ __status__ = "Development"
 
 
 class Blackbox(object):
-    def __init__(self, model, device=None, output_type='probs', topk=None, rounding=None):
-        self.device = torch.device('cuda') if device is None else device
-        self.output_type = output_type
-        self.topk = topk
-        self.rounding = rounding
+	def __init__(self, model, device=None, output_type='probs', topk=None, rounding=None):
+		self.device = torch.device('cuda') if device is None else device
+		self.output_type = output_type
+		self.topk = topk
+		self.rounding = rounding
 
-        self.__model = model.to(device)
-        self.output_type = output_type
-        self.__model.eval()
+		self.__model = model.to(device)
+		self.output_type = output_type
+		self.__model.eval()
 
-        self.__call_count = 0
+		self.__call_count = 0
 
-    @classmethod
-    def from_modeldir(cls, model_dir, vocab_size, num_classes, embed_dim, device=None, output_type='probs'):
-        device = torch.device('cuda') if device is None else device
+	@classmethod
+	def from_modeldir(cls, model_dir, vocab_size, device=None, pretrained=None, output_type='probs'):
+		device = torch.device('cuda') if device is None else device
 
-        # What was the model architecture used by this model?
-        params_path = osp.join(model_dir, 'params.json')
-        with open(params_path) as jf:
-            params = json.load(jf)
-        model_arch = params['model_arch']
-        # num_classes = params['num_classes']
-        victim_dataset = params.get('dataset', 'imagenet')
-        modelfamily = datasets.dataset_to_modelfamily[victim_dataset]
+		# What was the model architecture used by this model?
+		params_path = osp.join(model_dir, 'params.json')
+		with open(params_path) as jf:
+			params = json.load(jf)
 
-        # Instantiate the model
-        # model = model_utils.get_net(model_arch, n_output_classes=num_classes)
-        model = zoo.get_net(model_arch, modelfamily, pretrained=None, vocab_size=vocab_size, num_class=num_classes, embed_dim=embed_dim)
-        model = model.to(device)
+		model_arch = params['model_arch']
+		num_classes = params['num_classes']
+		victim_dataset = params.get('dataset', 'imagenet')
+		modelfamily = datasets.dataset_to_modelfamily[victim_dataset]
 
-        # Load weights
-        checkpoint_path = osp.join(model_dir, 'model_best.pth.tar')
-        if not osp.exists(checkpoint_path):
-            checkpoint_path = osp.join(model_dir, 'checkpoint.pth.tar')
-        print("=> loading checkpoint '{}'".format(checkpoint_path))
-        checkpoint = torch.load(checkpoint_path, map_location=device) #To run on local machine. Remove when you run on the server.
-        epoch = checkpoint['epoch']
-        best_test_acc = checkpoint['best_acc']
-        model.load_state_dict(checkpoint['state_dict'])
-        print("=> loaded checkpoint (epoch {}, acc={:.2f})".format(epoch, best_test_acc))
+		if model_arch == 'self_attention':
+			from knockoff.victim.blackbox_config import SELF_ATTENTION_CONFIG as config
+		elif model_arch == 'wordembedding':
+			pass
+		else:
+			raise NoImplementedError('No config for the architecture.')
+		kwargs = get_params(params, config)
 
-        blackbox = cls(model, device, output_type)
-        return blackbox
+		print('WTF in the params?!')
+		print(params)
+		print('='*20)
+		# Instantiate the model
+		# model = model_utils.get_net(model_arch, n_output_classes=num_classes)
+		model = zoo.get_net(model_arch, modelfamily, pretrained, **kwargs)
+		# model = zoo.get_net(model_arch, modelfamily, pretrained=None, vocab_size=vocab_size, num_class=num_classes, embed_dim=embed_dim)
+		model = model.to(device)
 
-    def truncate_output(self, y_t_probs):
-        if self.topk is not None:
-            # Zero-out everything except the top-k predictions
-            topk_vals, indices = torch.topk(y_t_probs, self.topk)
-            newy = torch.zeros_like(y_t_probs)
-            if self.rounding == 0:
-                # argmax prediction
-                newy = newy.scatter(1, indices, torch.ones_like(topk_vals))
-            else:
-                newy = newy.scatter(1, indices, topk_vals)
-            y_t_probs = newy
+		# Load weights
+		checkpoint_path = osp.join(model_dir, 'model_best.pth.tar')
+		if not osp.exists(checkpoint_path):
+			checkpoint_path = osp.join(model_dir, 'checkpoint.pth.tar')
+		print("=> loading checkpoint '{}'".format(checkpoint_path))
+		checkpoint = torch.load(checkpoint_path, map_location=device) #To run on local machine. Remove when you run on the server.
+		epoch = checkpoint['epoch']
+		best_test_acc = checkpoint['best_acc']
+		model.load_state_dict(checkpoint['state_dict'])
+		print("=> loaded checkpoint (epoch {}, acc={:.2f})".format(epoch, best_test_acc))
 
-        # Rounding of decimals
-        if self.rounding is not None:
-            y_t_probs = torch.Tensor(np.round(y_t_probs.numpy(), decimals=self.rounding))
+		blackbox = cls(model, device, output_type)
+		return blackbox, model_arch
 
-        return y_t_probs
+	def truncate_output(self, y_t_probs):
+		if self.topk is not None:
+			# Zero-out everything except the top-k predictions
+			topk_vals, indices = torch.topk(y_t_probs, self.topk)
+			newy = torch.zeros_like(y_t_probs)
+			if self.rounding == 0:
+				# argmax prediction
+				newy = newy.scatter(1, indices, torch.ones_like(topk_vals))
+			else:
+				newy = newy.scatter(1, indices, topk_vals)
+			y_t_probs = newy
 
-    def __call__(self, query_input, offsets):
-        # TypeCheck.multiple_image_blackbox_input_tensor(query_input)
+		# Rounding of decimals
+		if self.rounding is not None:
+			y_t_probs = torch.Tensor(np.round(y_t_probs.numpy(), decimals=self.rounding))
 
-        with torch.no_grad():
-            query_input = query_input.to(self.device)
-            query_output = self.__model(query_input, offsets)
-            self.__call_count += query_input.shape[0]
+		return y_t_probs
 
-            query_output_probs = F.softmax(query_output, dim=1).cpu()
-        #
-        # query_output_probs = self.truncate_output(query_output_probs)
-        return query_output_probs
+	def __call__(self, query_input, offsets):
+		# TypeCheck.multiple_image_blackbox_input_tensor(query_input)
+
+		with torch.no_grad():
+			query_input = query_input.to(self.device)
+			query_output = self.__model(query_input, offsets)
+			self.__call_count += query_input.shape[0]
+
+			query_output_probs = F.softmax(query_output, dim=1).cpu()
+		#
+		# query_output_probs = self.truncate_output(query_output_probs)
+		return query_output_probs

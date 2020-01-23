@@ -56,7 +56,7 @@ class RandomAdversary(object):
 		self.idx_set = set(range(len(self.queryset)))
 		self.transferset = TransferSet(len(self.queryset.get_labels()), None, self.batch_size)
 
-	def get_transferset(self, budget):
+	def get_transferset(self, budget, collate_fn):
 		sampler = torch.utils.data.RandomSampler(self.queryset, replacement=True, num_samples=budget)
 		count = 0
 		# selected_element_indices = np.random.choice(len(self.queryset), budget)
@@ -67,7 +67,8 @@ class RandomAdversary(object):
 			#     if budget < self.batch_size:
 			#         current_batch_size = budget
 			batch_data = []
-			data = DataLoader(self.queryset, batch_size=self.batch_size, collate_fn=model_utils.generate_batch, sampler=sampler)
+			data = DataLoader(self.queryset, batch_size=self.batch_size, collate_fn=collate_fn, sampler=sampler)
+			# data = DataLoader(self.queryset, batch_size=self.batch_size, collate_fn=model_utils.generate_batch, sampler=sampler)
 			for i, (text, offsets, label) in enumerate(data):
 				query_prediction_probabilities = self.blackbox(text, offsets)
 				# offsets = torch.cat((offsets, torch.tensor([len(text)-1])), dim=0)
@@ -150,12 +151,13 @@ def main():
 		testset = torch.load(test_data_path)
 
 	queryset, _ = trainset, testset
-	vocab_size = len(trainset.get_vocab())
-	num_classes = len(trainset.get_labels())
+	# vocab_size = len(trainset.get_vocab())
+	# num_classes = len(trainset.get_labels())
 	# ----------- Initialize blackbox i.e. victim model
 	blackbox_dir = params['victim_model_dir']
-	embed_dim = 32
-	blackbox = Blackbox.from_modeldir(blackbox_dir, vocab_size, num_classes, embed_dim, device)
+	# embed_dim = 16
+	blackbox, model_arch = Blackbox.from_modeldir(blackbox_dir, device)
+	# blackbox = Blackbox.from_modeldir(blackbox_dir, vocab_size, num_classes, embed_dim, device)
 
 	# ----------- Initialize adversary
 	batch_size = params['batch_size']
@@ -169,7 +171,13 @@ def main():
 		raise ValueError("Unrecognized policy")
 
 	print('=> constructing transfer set...')
-	transferset = adversary.get_transferset(params['budget'])
+	if model_arch in ['attention_model', 'self_attention', 'rcnn']:
+		transferset = adversary.get_transferset(params['budget'], 
+												model_utils.generate_batch_for_var_length)
+	elif model_arch == 'wordembedding':
+		transferset = adversary.get_transferset(params['budget'], model_utils.generate_batch)
+	else:
+		raise ValueError('No architecture support.')
 	with open(transfer_out_path, 'wb') as wf:
 		pickle.dump(transferset, wf)
 	print('=> transfer set ({} samples) written to: {}'.format(len(transferset.data) * transferset.batch_size, transfer_out_path))

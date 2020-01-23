@@ -9,7 +9,7 @@ from torch.nn import functional as F
 __all__ = ['self_attention']
 
 class SelfAttention(nn.Module):
-	def __init__(self, num_class, hidden_size, 
+	def __init__(self, num_classes, hidden_size, 
 				 vocab_size, seq_len, embed_dim, weights=None):
 		super(SelfAttention, self).__init__()
 
@@ -17,7 +17,7 @@ class SelfAttention(nn.Module):
 		Arguments
 		---------
 		batch_size : Size of the batch which is same as the batch_size of the data returned by the TorchText BucketIterator
-		num_class : 2 = (pos, neg)
+		num_classes : 2 = (pos, neg)
 		hidden_sie : Size of the hidden_state of the LSTM
 		vocab_size : Size of the vocabulary containing unique words
 		embed_dim : Embeddding dimension of GloVe word embeddings
@@ -27,7 +27,7 @@ class SelfAttention(nn.Module):
 		
 		"""
 
-		self.num_class = num_class
+		self.num_classes = num_classes
 		self.hidden_size = hidden_size
 		self.vocab_size = vocab_size
 		self.embed_dim = embed_dim
@@ -47,7 +47,7 @@ class SelfAttention(nn.Module):
 		self.W_s1 = nn.Linear(2*hidden_size, 350)
 		self.W_s2 = nn.Linear(350, 30)
 		self.fc_layer = nn.Linear(30*2*hidden_size, 2000)
-		self.label = nn.Linear(2000, num_class)
+		self.label = nn.Linear(2000, num_classes)
 
 	def attention_net(self, lstm_output):
 
@@ -106,7 +106,7 @@ class SelfAttention(nn.Module):
 		fc_out = self.fc_layer(
 			hidden_matrix.view(-1, hidden_matrix.size()[1]*hidden_matrix.size()[2]))
 		logits = self.label(fc_out)
-		# logits.size() = (batch_size, num_class)
+		# logits.size() = (batch_size, num_classes)
 
 		return logits
 

@@ -158,7 +158,7 @@ def main():
 		seq_len = count_seqlen([trainset, validset])
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
-							hidden_size=hidden_size, num_class=num_classes, 
+							hidden_size=hidden_size, num_classes=num_classes, 
 							seq_len=seq_len, num_layers=num_layers, 
 							dropout=dropout)
 
@@ -168,13 +168,13 @@ def main():
 		
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
-							hidden_size=hidden_size, num_class=num_classes, 
+							hidden_size=hidden_size, num_classes=num_classes, 
 							seq_len=seq_len)
 
 	elif model_name == 'wordembedding':
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
-							num_class=num_classes)
+							num_classes=num_classes)
 
 
 	model = model.to(device)
@@ -209,6 +209,8 @@ def main():
 	params['created_on'] = str(datetime.now())
 	params_out_path = osp.join(out_path, 'params.json')
 	with open(params_out_path, 'w') as jf:
+		params['seq_len'] = seq_len
+		params['vocab_size'] = vocab_size
 		json.dump(params, jf, indent=True)
 
 if __name__ == '__main__':
