@@ -10,7 +10,7 @@ import numpy as np
 __all__ = ['attention_model']
 
 class AttentionModel(torch.nn.Module):
-	def __init__(self, num_class, hidden_size,  
+	def __init__(self, num_classes, hidden_size,  
 				 vocab_size, seq_len, embed_dim, 
 				 num_layers=1, dropout=.5, weights=None):
 		super(AttentionModel, self).__init__()
@@ -18,7 +18,7 @@ class AttentionModel(torch.nn.Module):
 		"""
 		Arguments
 		---------
-		num_class : 2 = (pos, neg)
+		num_classes : 2 = (pos, neg)
 		hidden_sie : Size of the hidden_state of the LSTM
 		vocab_size : Size of the vocabulary containing unique words
 		embed_dim : Embeddding dimension of GloVe word embeddings
@@ -28,7 +28,7 @@ class AttentionModel(torch.nn.Module):
 		
 		"""
 		
-		self.num_class = num_class
+		self.num_classes = num_classes
 		self.hidden_size = hidden_size
 		self.vocab_size = vocab_size
 		self.seq_len = seq_len
@@ -42,7 +42,7 @@ class AttentionModel(torch.nn.Module):
 				
 		self.lstm = nn.LSTM(embed_dim, hidden_size, batch_first=True, 
 							num_layers=num_layers,  dropout=dropout)
-		self.label = nn.Linear(hidden_size*num_layers, num_class)
+		self.label = nn.Linear(hidden_size*num_layers, num_classes)
 
 		self._init_weights()
 		
@@ -116,7 +116,7 @@ class AttentionModel(torch.nn.Module):
 		Returns
 		-------
 		Output of the linear layer containing logits for pos & neg class which receives its input as the new_hidden_state which is basically the output of the Attention network.
-		final_output.shape = (batch_size, num_class)
+		final_output.shape = (batch_size, num_classes)
 		
 		"""
 		
