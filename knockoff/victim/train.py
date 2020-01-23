@@ -8,7 +8,6 @@ import os.path as osp
 from datetime import datetime
 
 import torch
-from torchtext.datasets import text_classification
 
 import knockoff.config as cfg
 import knockoff.models.zoo as zoo
@@ -82,15 +81,22 @@ def main():
 		device = torch.device('cpu')
 
 	# Currently supports only the torchtext datasets
-	valid_datasets = list(text_classification.DATASETS.keys())
+	valid_datasets = list(datasets.__dict__["text_classification"].DATASETS.keys())
 	if dataset_name not in valid_datasets:
 		raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
 
 	# Currently, we will support classification tasks only. Sentiment task is the next one.
+	dataset = datasets.__dict__["text_classification"].DATASETS[dataset_name]
 	# See /knockoff/datasets/__init__.py for mapping
-	modelfamily = datasets.dataset_to_modelfamily[dataset_name]  # e.g. 'classification'
-	metadata = datasets.dataset_metadata[dataset_name]  # Relevant parameters for the task. e.g. 'ngram'
 
+	modelfamily = datasets.dataset_to_modelfamily[dataset_name]  # e.g. 'classification'
+
+	# extract relevant parameters for the task. e.g. 'ngram'
+	if dataset_name in datasets.dataset_metadata.keys():
+		metadata = datasets.dataset_metadata[dataset_name]  
+	else:
+		metadata = datasets.dataset_metadata['default']
+		
 	ngrams = metadata['ngram']
 
 	# If dataset does not exist, download it and save it
@@ -101,7 +107,7 @@ def main():
 		if not os.path.exists('.data'):
 			print("Creating directory {}".format(datadir))
 			os.mkdir('.data')
-		trainset, testset = text_classification.DATASETS[dataset_name](root='.data', ngrams=ngrams)
+		trainset, testset = dataset(root='.data', ngrams=ngrams)
 		print("Saving train data to {}".format(train_data_path))
 		torch.save(trainset, train_data_path)
 		print("Saving test data to {}".format(test_data_path))
