@@ -38,6 +38,7 @@ def train_and_valid(trainset, testset, model, model_name, modelfamily, out_path,
 					num_epochs=5, device='cpu'):
 	if not osp.exists(out_path):
 		knockoff_utils.create_dir(out_path)
+		print('Created following directory: ', osp.abspath(out_path))
 
 	optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=lr_gamma)
@@ -55,7 +56,7 @@ def train_and_valid(trainset, testset, model, model_name, modelfamily, out_path,
 			columns = ['run_id', 'epoch', 'training loss', 'test accuracy', 'best_accuracy']
 			wf.write('\t'.join(columns) + '\n')
 
-	model_out_path = osp.join(out_path, 'checkpoint-{}-{}.pth.tar'.format(model_name, modelfamily))
+	model_out_path = osp.join(out_path, 'checkpoint.pth.tar'.format(model_name, modelfamily))
 
 	for epoch in range(num_epochs):
 
