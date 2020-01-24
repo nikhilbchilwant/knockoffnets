@@ -68,9 +68,6 @@ class Blackbox(object):
 			raise NoImplementedError('No config for the architecture.')
 		kwargs = get_params(params, config)
 
-		print('WTF in the params?!')
-		print(params)
-		print('='*20)
 		# Instantiate the model
 		# model = model_utils.get_net(model_arch, n_output_classes=num_classes)
 		model = zoo.get_net(model_arch, modelfamily, pretrained, **kwargs)
