@@ -124,7 +124,7 @@ def main():
 	# ----------- Set up queryset
 	queryset_name = params['queryset']
 	ngrams = params['ngrams']
-	valid_datasets = list(text_classification.DATASETS.keys())
+	valid_datasets = list(text_classification.DATASETS.keys()) + ['CLOSED_WORLD']
 	if queryset_name not in valid_datasets:
 		raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
 	modelfamily = datasets.dataset_to_modelfamily[queryset_name]
@@ -154,7 +154,10 @@ def main():
 	num_classes = len(trainset.get_labels())
 	# ----------- Initialize blackbox i.e. victim model
 	blackbox_dir = params['victim_model_dir']
-	embed_dim = 32
+	embed_dim = 32#params['embed_dim']
+	# vocab_size = 1308844
+	num_classes = 4
+	blackbox = Blackbox.from_modeldir(blackbox_dir, vocab_size, num_classes, embed_dim, device)
 	blackbox = Blackbox.from_modeldir(blackbox_dir, vocab_size, num_classes, embed_dim, device)
 
 	# ----------- Initialize adversary

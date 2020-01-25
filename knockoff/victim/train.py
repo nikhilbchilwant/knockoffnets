@@ -9,7 +9,7 @@ from datetime import datetime
 
 import torch
 from torchtext.datasets import text_classification
-
+# from data_preperator
 import knockoff.config as cfg
 import knockoff.models.zoo as zoo
 import knockoff.utils.model as model_utils
@@ -82,7 +82,7 @@ def main():
 		device = torch.device('cpu')
 
 	# Currently supports only the torchtext datasets
-	valid_datasets = list(text_classification.DATASETS.keys())
+	valid_datasets = list(text_classification.DATASETS.keys()) + ["CLOSED_WORLD"]
 	if dataset_name not in valid_datasets:
 		raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
 
@@ -102,6 +102,7 @@ def main():
 			print("Creating directory {}".format(datadir))
 			os.mkdir('.data')
 		trainset, testset = text_classification.DATASETS[dataset_name](root='.data', ngrams=ngrams)
+		data_preperator.DATASETS[dataset_name](root='.data', ngrams=ngrams)
 		print("Saving train data to {}".format(train_data_path))
 		torch.save(trainset, train_data_path)
 		print("Saving test data to {}".format(test_data_path))

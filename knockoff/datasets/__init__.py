@@ -11,6 +11,7 @@ dataset_to_modelfamily = {
 	'AmazonReviewFull': 'classification',
 	'EnWik9': 'classification',
 	'TREC': 'classification',
+	'CLOSED_WORLD':'classification',
 
 	### LanguageModelingDataset'
 	'SNLI': 'entailment',
@@ -24,6 +25,9 @@ dataset_to_modelfamily = {
 
 dataset_metadata = {
 	'AG_NEWS': {
+		'ngram': 2
+	},
+	'CLOSED_WORLD': {
 		'ngram': 2
 	}
 }
