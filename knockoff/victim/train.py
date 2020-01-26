@@ -155,10 +155,8 @@ class data_preperator():
 	}
 
 def _setup_datasets(dataset_name, root='.data', ngrams=2, vocab=None, include_unk=False):
-	if (True):
-		print("it works!")
 	# dataset_tar = download_from_url(URLS[dataset_name], root=root)
-	dataset_tar = '.data/closed_world_csv.tar.gz'
+	dataset_tar = './.data/closed_world_csv.tar.gz'
 	extracted_files = text_classification.extract_archive(dataset_tar)
 
 	for fname in extracted_files:
@@ -172,15 +170,14 @@ def _setup_datasets(dataset_name, root='.data', ngrams=2, vocab=None, include_un
 	if vocab is None:
 		print('Building Vocab based on {}'.format(closed_world_csv_path))
 		iterator = text_classification._csv_iterator(closed_world_csv_path, ngrams)
-		# vocab = text_classification.build_vocab_from_iterator(text_classification._csv_iterator(closed_world_csv_path, ngrams))
-
-		counter = Counter()
-		with tqdm(unit_scale=0, unit='lines') as t:
-			for tokens in iterator:
-				counter.update(tokens)
-				t.update(1)
-		word_vocab = Vocab(counter, vectors=Vocab.load_vectors(GloVe(name='6B', dim=100)))
-		vocab = word_vocab
+		vocab = text_classification.build_vocab_from_iterator(iterator)
+		# counter = Counter()
+		# with tqdm(unit_scale=0, unit='lines') as t:
+		# 	for tokens in iterator:
+		# 		counter.update(tokens)
+		# 		t.update(1)
+		# word_vocab = Vocab(counter, vectors=Vocab.load_vectors(GloVe(name='6B', dim=100)))
+		# vocab = word_vocab
 	else:
 		if not isinstance(vocab, text_classification.Vocab):
 			raise TypeError("Passed vocabulary is not of type Vocab")
