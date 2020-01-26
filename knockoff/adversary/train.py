@@ -187,13 +187,26 @@ def main():
 	# model = zoo.get_net(model_name, modelfamily, pretrained, vocab_size=len(trainset.get_vocab()), 
 	# 	embed_dim=params['embed_dim'], num_class=num_classes)
 
-	# ----------- Train
+	train_valid_split = params['train_valid_split']
+	if train_valid_split > .0:
+		data_num = len(transferset_samples.data)
+		valid_sample_num = int(data_num*train_valid_split)
+		validset = transferset_samples.data[:valid_sample_num] 
+		trainset = transferset_samples.data[valid_sample_num:]
+		print('Train-Valid split: train batch number: {}; valid batch number: {}'.format(
+			data_num-valid_sample_num, valid_sample_num))
+
 	model = model.to(device)
-	model_utils.train_and_valid_knockoff(transferset_samples.data, testset, 
+	model_utils.train_and_valid_knockoff(trainset, validset, testset, 
 										 model, model_name, modelfamily, 
 										 optimizer=optimizer, criterion=criterion, 
 										 scheduler=scheduler, device=device, 
 										 collate_fn=collate_fn, **params)
+	# model_utils.train_and_valid_knockoff(transferset_samples.data, testset, 
+	# 									 model, model_name, modelfamily, 
+	# 									 optimizer=optimizer, criterion=criterion, 
+	# 									 scheduler=scheduler, device=device, 
+	# 									 collate_fn=collate_fn, **params)
 
 	# Store arguments
 	params['created_on'] = str(datetime.now())

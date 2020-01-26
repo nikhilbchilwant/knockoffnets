@@ -132,7 +132,10 @@ def train_and_valid(trainset, testset, model, model_name, modelfamily,
 
 
 def test(model, criterion, test_data, batch_size, collate_fn, device='cpu'):
-	data = DataLoader(test_data, batch_size=batch_size, collate_fn=collate_fn)
+	if collate_fn:
+		data = DataLoader(test_data, batch_size=batch_size, collate_fn=collate_fn)
+	else:
+		data = test_data
 	total_accuracy = []
 	test_loss = .0
 	model.eval()
@@ -153,7 +156,7 @@ def test(model, criterion, test_data, batch_size, collate_fn, device='cpu'):
 	return test_acc, test_loss
 
 
-def train_and_valid_knockoff(trainset, testset, model, model_name, model_family, 
+def train_and_valid_knockoff(trainset, validset, testset, model, model_name, model_family, 
 							 batch_size=64, device=None, num_workers=10, collate_fn=generate_batch,
 							 optimizer=None, criterion=None, scheduler=None, checkpoint_suffix='', 
 							 **kwargs):
@@ -198,7 +201,7 @@ def train_and_valid_knockoff(trainset, testset, model, model_name, model_family,
 	model_out_path = osp.join(out_path, 'checkpoint-{}-{}.pth.tar'.format(model_name, model_family))
 
 	num_lines = num_epochs * len(trainset)
-	best_test_acc, test_acc = -1., -1.
+	best_valid_acc, valid_acc = -1., -1.
 
 	for epoch in range(num_epochs):
 
@@ -221,23 +224,30 @@ def train_and_valid_knockoff(trainset, testset, model, model_name, model_family,
 		scheduler.step()
 		train_acc /= total
 		train_loss = train_loss.item()
-		test_acc, test_loss = test(model, criterion, testset, batch_size, collate_fn, device)
-		best_test_acc = max(best_test_acc, test_acc)
+		valid_acc, valid_loss = test(model, criterion, validset, batch_size, None, device)
+		# best_valid_acc = max(best_valid_acc, valid_acc)
 
 		print("Train acc: {:3.3f}, Train loss: {:3.3f}, Valid acc: {:3.3f}, Valid loss: {:3.3f}".format(
-			train_acc, train_loss, test_acc, test_loss))
+			train_acc, train_loss, valid_acc, valid_loss))
 		print("")
 
-		if test_acc >= best_test_acc:
+		if valid_acc >= best_valid_acc:
+			best_valid_acc = valid_acc
 			state = {
 				'epoch': epoch,
 				'arch': model.__class__,
 				'state_dict': model.state_dict(),
-				'best_acc': test_acc,
+				'best_acc': valid_acc,
 				'optimizer': optimizer.state_dict(),
 				'created_on': str(datetime.now()),
 			}
 			torch.save(state, model_out_path)
+
+	print("Select best model in epoch: {}".format(epoch))
+	model.load_state_dict(state['state_dict'])
+
+	test_acc, test_loss = test(model, criterion, testset, batch_size, collate_fn, device)
+	print("Test acc: {:3.3f}, Test loss: {:3.3f}".format(test_acc, test_loss))
 
 	return model
 
