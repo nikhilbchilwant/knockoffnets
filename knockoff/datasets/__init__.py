@@ -24,6 +24,6 @@ dataset_to_modelfamily = {
 
 dataset_metadata = {
 	'AG_NEWS': {
-		'ngram': 2
+		'ngram': 1
 	}
 }
