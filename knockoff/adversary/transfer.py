@@ -8,6 +8,7 @@ import os
 import os.path as osp
 import pickle
 from datetime import datetime
+from functools import partial
 
 import numpy as np
 import torch
@@ -67,7 +68,8 @@ class RandomAdversary(object):
 			#     if budget < self.batch_size:
 			#         current_batch_size = budget
 			batch_data = []
-			data = DataLoader(self.queryset, batch_size=self.batch_size, collate_fn=collate_fn, sampler=sampler)
+			data = DataLoader(self.queryset, batch_size=self.batch_size, 
+							  collate_fn=collate_fn, sampler=sampler)
 			# data = DataLoader(self.queryset, batch_size=self.batch_size, collate_fn=model_utils.generate_batch, sampler=sampler)
 			for i, (text, offsets, label) in enumerate(data):
 				query_prediction_probabilities = self.blackbox(text, offsets)
@@ -83,6 +85,16 @@ class RandomAdversary(object):
 
 		self.transferset.data = batch_data
 		return self.transferset
+
+
+def remap_indices(vocab_victim, vocab_adversary):
+	
+	adv_idx_to_victim_idx = {}
+
+	for i, s in enumerate(vocab_adversary.itos):
+		adv_idx_to_victim_idx[i] = vocab_victim[s]
+
+	return adv_idx_to_victim_idx
 
 
 def main():
@@ -107,8 +119,11 @@ def main():
 	#                     default=1.0)
 	# ----------- Other params
 	parser.add_argument('-d', '--device_id', metavar='D', type=int, help='Device id', default=0)
-	parser.add_argument('-w', '--nworkers', metavar='N', type=int, help='# Worker threads to load data', default=10)
-	parser.add_argument('-n', '--ngrams', metavar='NG', type=int, help='#n-grams', default=2)
+	parser.add_argument('-w', '--nworkers', metavar='N', type=int, 
+						help='# Worker threads to load data', default=10)
+	parser.add_argument('-n', '--ngrams', metavar='NG', type=int, help='#n-grams', default=1)
+	parser.add_argument('--open_world', metavar='B', type=int, default=1, 
+						help='Activate open_world will remap the indices')
 	args = parser.parse_args()
 	params = vars(args)
 
@@ -132,9 +147,13 @@ def main():
 	# transform = datasets.modelfamily_to_transforms[modelfamily]['test']
 	# queryset = datasets.__dict__[queryset_name](train=True, transform=transform)
 	dataset_dir = '.data'
-	dataset_dir = dataset_dir + '/' + queryset_name.lower() + '_csv'
+
+	folder_name = datasets.dataset_metadata[queryset_name]['alias']
+	dataset_dir = dataset_dir + '/' + folder_name + '_csv'
+	# dataset_dir = dataset_dir + '/' + queryset_name.lower() + '_csv'
+
 	train_data_path = os.path.join(dataset_dir, queryset_name + "_ngrams_{}_train.data".format(ngrams))
-	test_data_path = os.path.join(dataset_dir, queryset_name + "_ngrams_{}_test.data".format(ngrams))
+	test_data_path = os.path.join(dataset_dir, queryset_name  + "_ngrams_{}_test.data".format(ngrams))
 	if not (os.path.exists(train_data_path) and os.path.exists(test_data_path)):
 		if not os.path.exists('.data'):
 			print("Creating directory {}".format(dataset_dir))
@@ -150,14 +169,23 @@ def main():
 		print("Loading test data from {}".format(test_data_path))
 		testset = torch.load(test_data_path)
 
-	queryset, _ = trainset, testset
 	# vocab_size = len(trainset.get_vocab())
 	# num_classes = len(trainset.get_labels())
 	# ----------- Initialize blackbox i.e. victim model
 	blackbox_dir = params['victim_model_dir']
-	# embed_dim = 16
-	blackbox, model_arch = Blackbox.from_modeldir(blackbox_dir, device)
-	# blackbox = Blackbox.from_modeldir(blackbox_dir, vocab_size, num_classes, embed_dim, device)
+	blackbox, model_arch, seq_len = Blackbox.from_modeldir(blackbox_dir, device)
+
+	# 20200128 LIN,Y.D. Remap adversary's indices to victim's indices
+	queryset, _ = trainset, testset
+
+	if params['open_world']:
+
+		victim_vocab_file = open(osp.join(params['victim_model_dir'], 'stoi.pkl'), 'rb')
+		victim_vocab = pickle.load(victim_vocab_file)
+		victim_vocab_file.close()
+
+		adversary_vocab = trainset.get_vocab()
+		adv_idx_to_victim_idx = remap_indices(victim_vocab, adversary_vocab)
 
 	# ----------- Initialize adversary
 	batch_size = params['batch_size']
@@ -172,12 +200,29 @@ def main():
 
 	print('=> constructing transfer set...')
 	if model_arch in ['attention_model', 'self_attention', 'rcnn']:
-		transferset = adversary.get_transferset(params['budget'], 
-												model_utils.generate_batch_for_var_length)
+
+		if params['open_world']:
+			collate_fn = partial(model_utils.generate_batch_for_var_length_with_remapped_indices,
+								 adv_idx_to_victim_idx,
+								 seq_len)
+		else:
+			collate_fn = partial(model_utils.generate_batch_for_var_length, seq_len)
+
 	elif model_arch == 'wordembedding':
-		transferset = adversary.get_transferset(params['budget'], model_utils.generate_batch)
+
+		if params['open_world']:
+			collate_fn = partial(model_utils.generate_batch_with_remapped_indices,
+								 adv_idx_to_victim_idx,
+								 seq_len)
+		else:
+			collate_fn = partial(model_utils.generate_batch, seq_len)
+
+		# transferset = adversary.get_transferset(params['budget'], collate_fn)
 	else:
 		raise ValueError('No architecture support.')
+
+	transferset = adversary.get_transferset(params['budget'], collate_fn)
+
 	with open(transfer_out_path, 'wb') as wf:
 		pickle.dump(transferset, wf)
 	print('=> transfer set ({} samples) written to: {}'.format(

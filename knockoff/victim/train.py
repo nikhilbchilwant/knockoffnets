@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import os.path as osp
+import pickle
 from datetime import datetime
 
 import torch
@@ -144,7 +145,8 @@ def main():
 
 	
 	# Extract variables for model from the dataset
-	vocab_size = len(trainset.get_vocab())
+	vocab = trainset.get_vocab()
+	vocab_size = len(vocab)
 	params['num_classes'] = len(trainset.get_labels())
 	num_classes = params['num_classes']
 
@@ -175,7 +177,6 @@ def main():
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
 							num_classes=num_classes)
-
 
 	model = model.to(device)
 
@@ -208,10 +209,16 @@ def main():
 	# Store arguments in json file. Maybe for the transfer set step?
 	params['created_on'] = str(datetime.now())
 	params_out_path = osp.join(out_path, 'params.json')
+	stoi_path = osp.join(out_path, 'stoi.pkl')
 	with open(params_out_path, 'w') as jf:
 		params['seq_len'] = seq_len
 		params['vocab_size'] = vocab_size
+		params['stoi_path'] = stoi_path
 		json.dump(params, jf, indent=True)
+
+		stoi = open(stoi_path, 'wb')
+		pickle.dump(vocab.stoi, stoi)
+		stoi.close()
 
 if __name__ == '__main__':
 	main()

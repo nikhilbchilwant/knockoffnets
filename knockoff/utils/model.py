@@ -5,7 +5,8 @@ Common methods used by model
 
 import os.path as osp
 import sys
-from datetime import datetime
+from datetime  import datetime
+from functools import partial
 
 import torch
 import torch.nn as nn
@@ -25,26 +26,67 @@ __email__ = "orekondy@mpi-inf.mpg.de"
 __status__ = "Development"
 
 
-def generate_batch(batch):
+def generate_batch(seq_len, batch):
 	label = torch.tensor([entry[0] for entry in batch])
-	text = [entry[1] for entry in batch]
-	offsets = [0] + [len(entry) for entry in text]
+	text = [entry[1][:seq_len] for entry in batch]
+	offsets = [0] + [len(entry[:seq_len]) for entry in text]
 
 	offsets = torch.tensor(offsets[:-1]).cumsum(dim=0)
 	text = torch.cat(text)
 
 	return text, offsets, label
 
+def generate_batch_with_remapped_indices(adv_idx_to_victim_idx, seq_len, batch):
 
-def generate_batch_for_var_length(batch):
+	_map_index = partial(map_index, adv_idx_to_victim_idx)
+	label = torch.tensor([entry[0] for entry in batch])
+	offsets = [0] + [len(entry) for entry in text]
+	text  = []
+	for _, x in batch:
+
+		x = [_x for _x in map(_map_index, x)]
+		x = torch.tensor(x, dtype=torch.int64)
+		text.append(x)
+
+	text = torch.cat(text)
+	return text, offsets, label
+
+def generate_batch_for_var_length(seq_len, batch):
 
 	label = torch.tensor([entry[0] for entry in batch])
-	text = [entry[1] for entry in batch]
+	text = [entry[1][:seq_len] for entry in batch]
 	padded_text = pad_sequence(text, padding_value=1)
 	text_lengths = torch.tensor(
 		sorted([len(t) for t in text], reverse=True))
 
 	return padded_text, text_lengths, label
+
+
+def generate_batch_for_var_length_with_remapped_indices(adv_idx_to_victim_idx, seq_len, batch):
+
+	label = torch.tensor([entry[0] for entry in batch])
+	_map_index = partial(map_index, adv_idx_to_victim_idx)
+
+	text  = []
+	for _, x in batch:
+		x = [_x for _x in map(_map_index, x[:seq_len])]
+		x = torch.tensor(x, dtype=torch.int64)
+		text.append(x)
+
+	padded_text  = pad_sequence(text, padding_value=1)
+	text_lengths = torch.tensor(
+		sorted([len(t) for t in text], reverse=True))
+
+	return padded_text, text_lengths, label
+
+
+def map_index(adv_idx_to_victim_idx, x):
+
+	x = x.item()
+	if x in adv_idx_to_victim_idx:
+		return adv_idx_to_victim_idx[x]
+	else:
+		return adv_idx_to_victim_idx[0]
 
 
 def train_and_valid(trainset, testset, model, model_name, modelfamily, 

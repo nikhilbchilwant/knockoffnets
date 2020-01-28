@@ -24,6 +24,16 @@ dataset_to_modelfamily = {
 
 dataset_metadata = {
 	'AG_NEWS': {
-		'ngram': 1
-	}
+		'ngram': 1,
+		'alias': 'ag_news'
+	},
+	'YahooAnswers': {
+		'ngram': 1,
+		'alias': 'yahoo_answers'
+	},
+	'SogouNews': {
+		'ngram': 1,
+		'alias': 'sogou_news'
+	},
+
 }

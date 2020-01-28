@@ -53,6 +53,7 @@ class Blackbox(object):
 
 		model_arch = params['model_arch']
 		num_classes = params['num_classes']
+		seq_len = params['seq_len']
 		victim_dataset = params.get('dataset', 'imagenet')
 		modelfamily = datasets.dataset_to_modelfamily[victim_dataset]
 
@@ -86,7 +87,7 @@ class Blackbox(object):
 		print("=> loaded checkpoint (epoch {}, acc={:.2f})".format(epoch, best_test_acc))
 
 		blackbox = cls(model, device, output_type)
-		return blackbox, model_arch
+		return blackbox, model_arch, seq_len
 
 	def truncate_output(self, y_t_probs):
 		if self.topk is not None:
