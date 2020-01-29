@@ -70,7 +70,8 @@ def generate_batch_for_var_length_with_remapped_indices(adv_idx_to_victim_idx, s
 	text  = []
 	for _, x in batch:
 		x = [_x for _x in map(_map_index, x[:seq_len])]
-		x = torch.tensor(x, dtype=torch.int64)
+		x = torch.tensor(x)
+		# x = torch.tensor(x, dtype=torch.int64)
 		text.append(x)
 
 	padded_text  = pad_sequence(text, padding_value=1)

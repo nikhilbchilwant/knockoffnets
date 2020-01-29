@@ -87,7 +87,7 @@ class Blackbox(object):
 		print("=> loaded checkpoint (epoch {}, acc={:.2f})".format(epoch, best_test_acc))
 
 		blackbox = cls(model, device, output_type)
-		return blackbox, model_arch, seq_len
+		return blackbox, model_arch, seq_len, num_classes
 
 	def truncate_output(self, y_t_probs):
 		if self.topk is not None:

@@ -30,22 +30,22 @@ __status__ = "Development"
 
 # Stores transfer set as a list of btaches
 class TransferSet(object):
-	def __init__(self, num_classes, data_batches, batch_size):
+	def __init__(self, num_classes, data_batches, vocab_size, batch_size):
 		self.num_classes = num_classes
 		self.data = data_batches
 		self.batch_size = batch_size
-
+		self.vocab_size = vocab_size
 
 class RandomAdversary(object):
-	def __init__(self, blackbox, queryset, batch_size=16):
+	def __init__(self, blackbox, queryset, num_classes, vocab_size, batch_size=16):
 		self.blackbox = blackbox
 		self.queryset = queryset
 
 		self.n_queryset = len(self.queryset)
 		self.batch_size = batch_size
 		self.idx_set = set()
-
-		self.transferset = TransferSet(len(self.queryset.get_labels()), None, batch_size)  # List of tuples [(text tensor, label)]
+		self.transferset = TransferSet(num_classes, None, vocab_size, batch_size)
+		# self.transferset = TransferSet(len(self.queryset.get_labels()), None, batch_size)  # List of tuples [(text tensor, label)]
 
 		self._restart()
 
@@ -55,7 +55,7 @@ class RandomAdversary(object):
 		torch.cuda.manual_seed(cfg.DEFAULT_SEED)
 
 		self.idx_set = set(range(len(self.queryset)))
-		self.transferset = TransferSet(len(self.queryset.get_labels()), None, self.batch_size)
+		# self.transferset = TransferSet(len(self.queryset.get_labels()), None, self.batch_size)
 
 	def get_transferset(self, budget, collate_fn):
 		sampler = torch.utils.data.RandomSampler(self.queryset, replacement=True, num_samples=budget)
@@ -75,6 +75,7 @@ class RandomAdversary(object):
 				query_prediction_probabilities = self.blackbox(text, offsets)
 				# offsets = torch.cat((offsets, torch.tensor([len(text)-1])), dim=0)
 				labels = query_prediction_probabilities.argmax(1)
+
 				# for sample_index in range(0, len(query_prediction_probabilities)):
 				#     self.transferset.append((text.narrow(0, offsets[sample_index],
 				#                                          offsets[sample_index + 1] - offsets[sample_index] + 1), offsets,
@@ -169,12 +170,10 @@ def main():
 		print("Loading test data from {}".format(test_data_path))
 		testset = torch.load(test_data_path)
 
-	# vocab_size = len(trainset.get_vocab())
-	# num_classes = len(trainset.get_labels())
 	# ----------- Initialize blackbox i.e. victim model
 	blackbox_dir = params['victim_model_dir']
-	blackbox, model_arch, seq_len = Blackbox.from_modeldir(blackbox_dir, device)
-
+	blackbox, model_arch, seq_len, num_classes = Blackbox.from_modeldir(blackbox_dir, device)
+	print('check blackbox num_classes:', num_classes)
 	# 20200128 LIN,Y.D. Remap adversary's indices to victim's indices
 	queryset, _ = trainset, testset
 
@@ -192,7 +191,8 @@ def main():
 	nworkers = params['nworkers']
 	transfer_out_path = osp.join(out_path, 'transferset.pickle')
 	if params['policy'] == 'random':
-		adversary = RandomAdversary(blackbox, queryset, batch_size=batch_size)
+		adversary = RandomAdversary(blackbox, queryset, num_classes, len(adversary_vocab), 
+									batch_size=batch_size)
 	elif params['policy'] == 'adaptive':
 		raise NotImplementedError()
 	else:
@@ -222,6 +222,8 @@ def main():
 		raise ValueError('No architecture support.')
 
 	transferset = adversary.get_transferset(params['budget'], collate_fn)
+
+	print('check transferset.num_classes:', transferset.num_classes)
 
 	with open(transfer_out_path, 'wb') as wf:
 		pickle.dump(transferset, wf)

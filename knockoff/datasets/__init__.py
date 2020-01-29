@@ -35,5 +35,8 @@ dataset_metadata = {
 		'ngram': 1,
 		'alias': 'sogou_news'
 	},
-
+	'YelpReviewPolarity': {
+		'ngram': 1,
+		'alias': 'yelp_review_polarity'
+	}
 }

@@ -8,13 +8,14 @@ import os
 import os.path as osp
 import pickle
 from datetime import datetime
+from functools import partial
 
 import torch
 import torch.nn as nn
 from torchtext.datasets import text_classification
 
 from knockoff.adversary.transfer import TransferSet
-from knockoff.victim.train import count_seqlen
+from knockoff.victim.train import count_seqlen, count_seqlen_v2
 import knockoff.config as cfg
 import knockoff.models.zoo as zoo
 import knockoff.utils.model as model_utils
@@ -94,6 +95,7 @@ def main():
 
 	# ----------- Set up transferset
 	transferset_path = osp.join(model_dir, 'transferset.pickle')
+	print('check transferset_path:', transferset_path)
 	with open(transferset_path, 'rb') as rf:
 		transferset_samples = pickle.load(rf)
 	num_classes = transferset_samples.num_classes
@@ -114,29 +116,32 @@ def main():
 
 	# If dataset does not exist, download it and save it
 	datadir = params['datadir']
-	ngrams = metadata['ngram']
+	ngrams = datasets.dataset_metadata[dataset_name]['ngram']
+	# ngrams = metadata['ngram']
+	folder_name = datasets.dataset_metadata[dataset_name]['alias']
+	dataset_dir = datadir + '/' + folder_name + '_csv'
 
-	dataset_dir = datadir + '/' + dataset_name.lower() + '_csv'
-	train_data_path = os.path.join(dataset_dir, dataset_name + "_ngrams_{}_train.data".format(ngrams))
+	# train_data_path = os.path.join(dataset_dir, transferset_name + "_ngrams_{}_train.data".format(ngrams))
 	test_data_path = os.path.join(dataset_dir, dataset_name + "_ngrams_{}_test.data".format(ngrams))
-	if not (os.path.exists(train_data_path) and os.path.exists(test_data_path)):
+	if not os.path.exists(test_data_path):
+	# if not (os.path.exists(train_data_path) and os.path.exists(test_data_path)):
 		if not os.path.exists('.data'):
 			print("Creating directory {}".format(datadir))
 			os.mkdir('.data')
-		trainset, testset = text_classification.DATASETS[dataset_name](root='.data', ngrams=ngrams)
-		print("Saving train data to {}".format(train_data_path))
-		torch.save(trainset, train_data_path)
+		_, testset = text_classification.DATASETS[dataset_name](root='.data', ngrams=ngrams)
+		# print("Saving train data to {}".format(train_data_path))
+		# torch.save(trainset, train_data_path)
 		print("Saving test data to {}".format(test_data_path))
 		torch.save(testset, test_data_path)
 	else:
-		print("Loading train data from {}".format(train_data_path))
-		trainset = torch.load(train_data_path)
+	# 	print("Loading train data from {}".format(train_data_path))
+	# 	trainset = torch.load(train_data_path)
 		print("Loading test data from {}".format(test_data_path))
 		testset = torch.load(test_data_path)
 
-	if len(trainset.get_labels()) != num_classes:
-		raise ValueError('# Transfer classes ({}) != # Testset classes ({})'.format(
-			num_classes, len(testset.get_labels())))
+	# if len(trainset.get_labels()) != num_classes:
+	# 	raise ValueError('# Transfer classes ({}) != # Testset classes ({})'.format(
+	# 		num_classes, len(testset.get_labels())))
 
 	# ----------- Set up model
 	model_name = params['model_arch']
@@ -148,33 +153,45 @@ def main():
 	hidden_size = params['hidden_size']
 	lr = params['lr']
 	lr_gamma = params['lr_gamma']
-	vocab_size = len(trainset.get_vocab())
+	# vocab_size = len(trainset.get_vocab())
+	vocab_size = transferset_samples.vocab_size
+
+	train_valid_split = params['train_valid_split']
+	trainset = transferset_samples.data
+
+	if train_valid_split > .0:
+		data_num = len(transferset_samples.data)
+		valid_sample_num = int(data_num*train_valid_split)
+		validset = transferset_samples.data[:valid_sample_num] 
+		trainset = transferset_samples.data[valid_sample_num:]
+		print('Train-Valid split: train batch number: {}; valid batch number: {}'.format(
+			data_num-valid_sample_num, valid_sample_num))
 
 	if model_name == 'attention_model':
 
-		seq_len = count_seqlen([trainset])
+		seq_len = count_seqlen_v2([trainset])
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
 							hidden_size=hidden_size, num_classes=num_classes, 
 							seq_len=seq_len, num_layers=num_layers, 
 							dropout=dropout)
-		collate_fn = model_utils.generate_batch_for_var_length
+		collate_fn = partial(model_utils.generate_batch_for_var_length, seq_len)
 
 	elif model_name in ['self_attention', 'rcnn']:
 
-		seq_len = count_seqlen([trainset])
+		seq_len = count_seqlen_v2([trainset])
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
 							hidden_size=hidden_size, num_classes=num_classes, 
 							seq_len=seq_len)
-		collate_fn = model_utils.generate_batch_for_var_length
+		collate_fn = partial(model_utils.generate_batch_for_var_length, seq_len)
 
 	elif model_name == 'wordembedding':
 
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
 							num_classes=num_classes)
-		collate_fn = model_utils.generate_batch
+		collate_fn = partial(model_utils.generate_batch, seq_len)
 
 	if opt_choice == 'adam':
 		optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -183,18 +200,6 @@ def main():
 
 	criterion = nn.CrossEntropyLoss(reduction='mean')
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=lr_gamma)
-
-	# model = zoo.get_net(model_name, modelfamily, pretrained, vocab_size=len(trainset.get_vocab()), 
-	# 	embed_dim=params['embed_dim'], num_class=num_classes)
-
-	train_valid_split = params['train_valid_split']
-	if train_valid_split > .0:
-		data_num = len(transferset_samples.data)
-		valid_sample_num = int(data_num*train_valid_split)
-		validset = transferset_samples.data[:valid_sample_num] 
-		trainset = transferset_samples.data[valid_sample_num:]
-		print('Train-Valid split: train batch number: {}; valid batch number: {}'.format(
-			data_num-valid_sample_num, valid_sample_num))
 
 	model = model.to(device)
 	model_utils.train_and_valid_knockoff(trainset, validset, testset, 

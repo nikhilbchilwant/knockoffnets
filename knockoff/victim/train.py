@@ -7,6 +7,7 @@ import os
 import os.path as osp
 import pickle
 from datetime import datetime
+from functools import partial
 
 import torch
 import torch.nn as nn
@@ -38,6 +39,19 @@ def count_seqlen(datasets):
 				seq_len = x_len
 
 	return seq_len
+
+def count_seqlen_v2(datasets):
+
+	seq_len = 0
+
+	for dataset in datasets:
+		for x, _, _ in dataset:
+			x_len = len(x)
+			if x_len > seq_len:
+				seq_len = x_len
+
+	return seq_len
+
 
 def main():
 	parser = argparse.ArgumentParser(description='Train a model')
@@ -71,7 +85,6 @@ def main():
 	parser.add_argument('--train_subset', type=int, help='Use a subset of train set', default=None)
 	parser.add_argument('--pretrained', type=str, help='Use pretrained network', default=None)
 	parser.add_argument('--weighted-loss', action='store_true', help='Use a weighted loss', default=None)
-
 
 	# 20200117 LIN,Y.D. More arguments
 	parser.add_argument('--train_valid_split', type=float, default=.1, metavar='N',
@@ -185,13 +198,13 @@ def main():
 		optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 		scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=lr_gamma)
 		criterion = nn.CrossEntropyLoss(reduction='mean')
-		collate_fn = model_utils.generate_batch_for_var_length
+		collate_fn = partial(model_utils.generate_batch_for_var_length, seq_len)
 		
 	elif model_name == 'wordembedding':
 		optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 		scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=lr_gamma)
 		criterion = nn.CrossEntropyLoss(reduction='mean')
-		collate_fn = model_utils.generate_batch
+		collate_fn = partial(model_utils.generate_batch, seq_len)
 
 	print('Start the training and validation process:')
 	print('')
