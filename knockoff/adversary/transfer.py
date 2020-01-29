@@ -59,7 +59,6 @@ class RandomAdversary(object):
 
 	def get_transferset(self, budget, collate_fn):
 		sampler = torch.utils.data.RandomSampler(self.queryset, replacement=True, num_samples=budget)
-		count = 0
 		# selected_element_indices = np.random.choice(len(self.queryset), budget)
 
 		with tqdm(total=budget) as pbar:
@@ -70,6 +69,7 @@ class RandomAdversary(object):
 			batch_data = []
 			data = DataLoader(self.queryset, batch_size=self.batch_size, 
 							  collate_fn=collate_fn, sampler=sampler)
+			count = len(data)
 			# data = DataLoader(self.queryset, batch_size=self.batch_size, collate_fn=model_utils.generate_batch, sampler=sampler)
 			for i, (text, offsets, label) in enumerate(data):
 				query_prediction_probabilities = self.blackbox(text, offsets)
@@ -82,10 +82,14 @@ class RandomAdversary(object):
 				#                              query_prediction_probabilities[sample_index]))
 				batch_data.append((text, offsets, labels))
 				count = count + len(label)
-				pbar.update(count)
+				pbar.update(1)
 
 		self.transferset.data = batch_data
 		return self.transferset
+
+	# 20200129 LIN,Y.D. 
+	def get_transferset_by_unk_budget(self, unk_budget, collate_fn):
+		sampler = torch.utils.data.RandomSampler(self.queryset, replacement=True)
 
 
 def remap_indices(vocab_victim, vocab_adversary):
@@ -96,6 +100,15 @@ def remap_indices(vocab_victim, vocab_adversary):
 		adv_idx_to_victim_idx[i] = vocab_victim[s]
 
 	return adv_idx_to_victim_idx
+
+# def count_missing_words(vocab_victim, vocab_adversary):
+
+# 	total_victim_vocab = len(vocab_victim)
+# 	total_adversary_voacb = len(vocab_adversary)
+# 	num_overlapped_vocab  = 0
+
+
+# 	pass
 
 
 def main():
