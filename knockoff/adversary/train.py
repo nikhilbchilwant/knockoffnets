@@ -117,11 +117,9 @@ def main():
 	# If dataset does not exist, download it and save it
 	datadir = params['datadir']
 	ngrams = datasets.dataset_metadata[dataset_name]['ngram']
-	# ngrams = metadata['ngram']
 	folder_name = datasets.dataset_metadata[dataset_name]['alias']
 	dataset_dir = datadir + '/' + folder_name + '_csv'
 
-	# train_data_path = os.path.join(dataset_dir, transferset_name + "_ngrams_{}_train.data".format(ngrams))
 	test_data_path = os.path.join(dataset_dir, dataset_name + "_ngrams_{}_test.data".format(ngrams))
 	if not os.path.exists(test_data_path):
 	# if not (os.path.exists(train_data_path) and os.path.exists(test_data_path)):
@@ -139,10 +137,6 @@ def main():
 		print("Loading test data from {}".format(test_data_path))
 		testset = torch.load(test_data_path)
 
-	# if len(trainset.get_labels()) != num_classes:
-	# 	raise ValueError('# Transfer classes ({}) != # Testset classes ({})'.format(
-	# 		num_classes, len(testset.get_labels())))
-
 	# ----------- Set up model
 	model_name = params['model_arch']
 	pretrained = params['pretrained']
@@ -153,7 +147,6 @@ def main():
 	hidden_size = params['hidden_size']
 	lr = params['lr']
 	lr_gamma = params['lr_gamma']
-	# vocab_size = len(trainset.get_vocab())
 	vocab_size = transferset_samples.vocab_size
 
 	train_valid_split = params['train_valid_split']
@@ -207,11 +200,6 @@ def main():
 										 optimizer=optimizer, criterion=criterion, 
 										 scheduler=scheduler, device=device, 
 										 collate_fn=collate_fn, **params)
-	# model_utils.train_and_valid_knockoff(transferset_samples.data, testset, 
-	# 									 model, model_name, modelfamily, 
-	# 									 optimizer=optimizer, criterion=criterion, 
-	# 									 scheduler=scheduler, device=device, 
-	# 									 collate_fn=collate_fn, **params)
 
 	# Store arguments
 	params['created_on'] = str(datetime.now())
