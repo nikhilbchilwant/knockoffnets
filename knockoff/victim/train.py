@@ -222,16 +222,16 @@ def main():
 	# Store arguments in json file. Maybe for the transfer set step?
 	params['created_on'] = str(datetime.now())
 	params_out_path = osp.join(out_path, 'params.json')
-	stoi_path = osp.join(out_path, 'stoi.pkl')
+	vocab_dict = osp.join(out_path, 'vocab_dict.pkl')
 	with open(params_out_path, 'w') as jf:
 		params['seq_len'] = seq_len
 		params['vocab_size'] = vocab_size
-		params['stoi_path'] = stoi_path
+		params['vocab_dict'] = vocab_dict
 		json.dump(params, jf, indent=True)
 
-		stoi = open(stoi_path, 'wb')
-		pickle.dump(vocab.stoi, stoi)
-		stoi.close()
+		vocab_file = open(vocab_dict, 'wb')
+		pickle.dump(vocab, vocab_file)
+		vocab_file.close()
 
 if __name__ == '__main__':
 	main()
