@@ -19,6 +19,7 @@ from tqdm import tqdm
 import knockoff.config as cfg
 import knockoff.utils.model as model_utils
 import knockoff.utils.utils as knockoff_utils
+import knockoff.utils.analysis as analysis
 from knockoff import datasets
 from knockoff.victim.blackbox import Blackbox
 
@@ -33,6 +34,7 @@ class TransferSet(object):
 	def __init__(self, num_classes, data_batches, vocab_size, batch_size):
 		self.num_classes = num_classes
 		self.data = data_batches
+		self.data_num = .0
 		self.batch_size = batch_size
 		self.vocab_size = vocab_size
 
@@ -57,8 +59,14 @@ class RandomAdversary(object):
 		self.idx_set = set(range(len(self.queryset)))
 		# self.transferset = TransferSet(len(self.queryset.get_labels()), None, self.batch_size)
 
+	def _blackbox_inference(self, x, x_meta):
+
+		query_prediction_probabilities = self.blackbox(x, x_meta)
+		return query_prediction_probabilities.argmax(1)
+
 	def get_transferset(self, budget, collate_fn):
 		sampler = torch.utils.data.RandomSampler(self.queryset, replacement=True, num_samples=budget)
+		count = 0
 		# selected_element_indices = np.random.choice(len(self.queryset), budget)
 
 		with tqdm(total=budget) as pbar:
@@ -69,27 +77,49 @@ class RandomAdversary(object):
 			batch_data = []
 			data = DataLoader(self.queryset, batch_size=self.batch_size, 
 							  collate_fn=collate_fn, sampler=sampler)
-			count = len(data)
-			# data = DataLoader(self.queryset, batch_size=self.batch_size, collate_fn=model_utils.generate_batch, sampler=sampler)
-			for i, (text, offsets, label) in enumerate(data):
-				query_prediction_probabilities = self.blackbox(text, offsets)
-				# offsets = torch.cat((offsets, torch.tensor([len(text)-1])), dim=0)
-				labels = query_prediction_probabilities.argmax(1)
-
-				# for sample_index in range(0, len(query_prediction_probabilities)):
-				#     self.transferset.append((text.narrow(0, offsets[sample_index],
-				#                                          offsets[sample_index + 1] - offsets[sample_index] + 1), offsets,
-				#                              query_prediction_probabilities[sample_index]))
+			
+			for i, (text, offsets, _) in enumerate(data):
+				lbls = self._blackbox_inference(text, offsets)
 				batch_data.append((text, offsets, labels))
-				count = count + len(label)
-				pbar.update(1)
+				count = count + len(lbls)
+				pbar.update(count)
 
 		self.transferset.data = batch_data
+		self.transferset.data_num = budget
 		return self.transferset
 
 	# 20200129 LIN,Y.D. 
-	def get_transferset_by_unk_budget(self, unk_budget, collate_fn):
+	def get_transferset_by_unk_budget(self, unk_percentage, budget, budget_lowerbound, collate_fn):
+
 		sampler = torch.utils.data.RandomSampler(self.queryset, replacement=True)
+		batch_data = []
+		data = DataLoader(self.queryset, batch_size=self.batch_size, collate_fn=collate_fn, sampler=sampler)
+		pbar = tqdm(total=budget)
+		unk_token_count = 0 # Count for the unk words
+		total_token_num = 0
+		total_data_num  = 0
+
+		for i, (text, offsets, _) in enumerate(data):
+
+			data_num = len(offsets)
+			total_data_num += data_num
+			total_token_num += sum([t.size(0) for t in text])
+			unk_token_count += torch.sum(text == 0, dtype=torch.float).item()
+			tmp_unk_percentage = unk_token_count / total_token_num
+			lbls = self._blackbox_inference(text, offsets)
+			batch_data.append((text, offsets, lbls))
+			pbar.update(data_num)	
+
+			if tmp_unk_percentage >= unk_percentage and total_data_num > budget_lowerbound: # Prevent the sample size is too small.
+				print('We reach the wanting percentage of unk tokens. # of transferset is {}. Transfer finished!'.format(total_data_num))
+				break
+			budget -= batch_num
+			if budget < 0:
+				raise ValueError('The transfer does not contain enough unk tokens, perhaps lower the percentage of unkonwn tokens?')
+
+		self.transferset.data = batch_data
+		self.transferset.data_num = total_data_num
+		return self.transferset
 
 
 def remap_indices(vocab_victim, vocab_adversary):
@@ -119,8 +149,12 @@ def main():
 						help='Path to victim model. Should contain files "model_best.pth.tar" and "params.json"')  # ??? Why do we need this?
 	parser.add_argument('--out_dir', metavar='PATH', type=str,
 						help='Destination directory to store transfer set', required=True)
-	parser.add_argument('--budget', metavar='N', type=int, help='Size of transfer set to construct',
-						required=True)
+	parser.add_argument('-b', '--budget', metavar='N', type=int, required=True,
+						help='Size of transfer set to construct')
+	parser.add_argument('-bl', '--budget_lowerbound', metavar='N', type=int, default=1000,
+						help='Size of transfer set to construct')
+	parser.add_argument('-u', '--unk_percentage', metavar='N', type=float, default=.0,
+						help='Percentage of unkonwn tokens in the transferset to construct')
 	parser.add_argument('--queryset', metavar='TYPE', type=str, help='Adversary\'s dataset (P_A(X))', required=True)
 	parser.add_argument('--batch_size', metavar='TYPE', type=int, help='Batch size of queries', default=8)
 	# parser.add_argument('--topk', metavar='N', type=int, help='Use posteriors only from topk classes',
@@ -158,13 +192,10 @@ def main():
 	if queryset_name not in valid_datasets:
 		raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
 	modelfamily = datasets.dataset_to_modelfamily[queryset_name]
-	# transform = datasets.modelfamily_to_transforms[modelfamily]['test']
-	# queryset = datasets.__dict__[queryset_name](train=True, transform=transform)
 	dataset_dir = '.data'
 
 	folder_name = datasets.dataset_metadata[queryset_name]['alias']
 	dataset_dir = dataset_dir + '/' + folder_name + '_csv'
-	# dataset_dir = dataset_dir + '/' + queryset_name.lower() + '_csv'
 
 	train_data_path = os.path.join(dataset_dir, queryset_name + "_ngrams_{}_train.data".format(ngrams))
 	test_data_path = os.path.join(dataset_dir, queryset_name  + "_ngrams_{}_test.data".format(ngrams))
@@ -187,6 +218,7 @@ def main():
 	blackbox_dir = params['victim_model_dir']
 	blackbox, model_arch, seq_len, num_classes = Blackbox.from_modeldir(blackbox_dir, device)
 	print('check blackbox num_classes:', num_classes)
+
 	# 20200128 LIN,Y.D. Remap adversary's indices to victim's indices
 	queryset, _ = trainset, testset
 
@@ -210,8 +242,7 @@ def main():
 		raise NotImplementedError()
 	else:
 		raise ValueError("Unrecognized policy")
-
-	print('=> constructing transfer set...')
+	
 	if model_arch in ['attention_model', 'self_attention', 'rcnn']:
 
 		if params['open_world']:
@@ -230,11 +261,24 @@ def main():
 		else:
 			collate_fn = partial(model_utils.generate_batch, seq_len)
 
-		# transferset = adversary.get_transferset(params['budget'], collate_fn)
 	else:
 		raise ValueError('No architecture support.')
 
-	transferset = adversary.get_transferset(params['budget'], collate_fn)
+	# 20200129 LIN,Y.D. Add budget options
+	if params['unk_percentage'] and params['budget']:
+
+		# Check if the unk_percentage setting is reasonable or not.
+		total_unk_percent = analysis.count_total_unk_percent_wrt_victim(queryset, collate_fn)
+		print('The total unk percentage: {}'.format(total_unk_percent))
+		if params['unk_percentage'] > total_unk_percent:
+			raise ValueError('Unk percentage is higher than the max percentage: {}'.format(total_unk_percent))
+
+		print('=> constructing transfer set...')
+		transferset = adversary.get_transferset_by_unk_budget(
+			params['unk_percentage'], params['budget'], params['budget_lowerbound'], collate_fn)
+	else:
+		print('=> constructing transfer set...')
+		transferset = adversary.get_transferset(params['budget'], collate_fn)	
 
 	print('check transferset.num_classes:', transferset.num_classes)
 
