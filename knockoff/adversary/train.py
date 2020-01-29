@@ -4,6 +4,7 @@ Replace this with a more detailed description of what this file contains.
 """
 import argparse
 import json
+import time
 import os
 import os.path as osp
 import pickle
@@ -195,6 +196,7 @@ def main():
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=lr_gamma)
 
 	model = model.to(device)
+	start_time = time.time()
 	model_utils.train_and_valid_knockoff(trainset, validset, testset, 
 										 model, model_name, modelfamily, 
 										 optimizer=optimizer, criterion=criterion, 
@@ -205,6 +207,7 @@ def main():
 	params['created_on'] = str(datetime.now())
 	params_out_path = osp.join(model_dir, 'params_train.json')
 	with open(params_out_path, 'w') as jf:
+		params['train_time'] = time.time() - start_time
 		json.dump(params, jf, indent=True)
 
 

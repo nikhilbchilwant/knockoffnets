@@ -4,6 +4,7 @@ Replace this with a more detailed description of what this file contains.
 """
 import argparse
 import json
+import time
 import os
 import os.path as osp
 import pickle
@@ -70,17 +71,14 @@ class RandomAdversary(object):
 		# selected_element_indices = np.random.choice(len(self.queryset), budget)
 
 		with tqdm(total=budget) as pbar:
-			# while budget>0:
-			#     current_batch_size = self.batch_size
-			#     if budget < self.batch_size:
-			#         current_batch_size = budget
+			
 			batch_data = []
 			data = DataLoader(self.queryset, batch_size=self.batch_size, 
 							  collate_fn=collate_fn, sampler=sampler)
 			
 			for i, (text, offsets, _) in enumerate(data):
 				lbls = self._blackbox_inference(text, offsets)
-				batch_data.append((text, offsets, labels))
+				batch_data.append((text, offsets, lbls))
 				count = count + len(lbls)
 				pbar.update(count)
 
@@ -113,7 +111,7 @@ class RandomAdversary(object):
 			if tmp_unk_percentage >= unk_percentage and total_data_num > budget_lowerbound: # Prevent the sample size is too small.
 				print('We reach the wanting percentage of unk tokens. # of transferset is {}. Transfer finished!'.format(total_data_num))
 				break
-			budget -= batch_num
+			budget -= data_num
 			if budget < 0:
 				raise ValueError('The transfer does not contain enough unk tokens, perhaps lower the percentage of unkonwn tokens?')
 
@@ -127,18 +125,9 @@ def remap_indices(vocab_victim, vocab_adversary):
 	adv_idx_to_victim_idx = {}
 
 	for i, s in enumerate(vocab_adversary.itos):
-		adv_idx_to_victim_idx[i] = vocab_victim[s]
+		adv_idx_to_victim_idx[i] = vocab_victim.stoi[s]
 
 	return adv_idx_to_victim_idx
-
-# def count_missing_words(vocab_victim, vocab_adversary):
-
-# 	total_victim_vocab = len(vocab_victim)
-# 	total_adversary_voacb = len(vocab_adversary)
-# 	num_overlapped_vocab  = 0
-
-
-# 	pass
 
 
 def main():
@@ -224,7 +213,7 @@ def main():
 
 	if params['open_world']:
 
-		victim_vocab_file = open(osp.join(params['victim_model_dir'], 'stoi.pkl'), 'rb')
+		victim_vocab_file = open(osp.join(params['victim_model_dir'], 'vocab_dict.pkl'), 'rb')
 		victim_vocab = pickle.load(victim_vocab_file)
 		victim_vocab_file.close()
 
@@ -265,6 +254,7 @@ def main():
 		raise ValueError('No architecture support.')
 
 	# 20200129 LIN,Y.D. Add budget options
+	start_time = time.time()
 	if params['unk_percentage'] and params['budget']:
 
 		# Check if the unk_percentage setting is reasonable or not.
@@ -284,13 +274,14 @@ def main():
 
 	with open(transfer_out_path, 'wb') as wf:
 		pickle.dump(transferset, wf)
-	print('=> transfer set ({} samples) written to: {}'.format(
-		len(transferset.data) * transferset.batch_size, transfer_out_path))
+	print('=> transfer set ({} samples) written to: {}'.format(transferset.data_num, transfer_out_path))
 
 	# Store arguments
 	params['created_on'] = str(datetime.now())
 	params_out_path = osp.join(out_path, 'params_transfer.json')
 	with open(params_out_path, 'w') as jf:
+		params['data_num'] = transferset.data_num
+		params['transfer_time'] = time.time() - start_time
 		json.dump(params, jf, indent=True)
 
 
