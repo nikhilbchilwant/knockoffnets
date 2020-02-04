@@ -21,6 +21,10 @@ import knockoff.config as cfg
 import knockoff.models.zoo as zoo
 import knockoff.utils.model as model_utils
 from knockoff import datasets
+from gensim.models import Word2Vec
+from gensim.scripts.glove2word2vec import glove2word2vec
+from gensim.models import KeyedVectors
+from gensim.test.utils import datapath, get_tmpfile
 
 __author__ = "Tribhuvanesh Orekondy"
 __maintainer__ = "Tribhuvanesh Orekondy"
@@ -34,6 +38,7 @@ def main():
 	parser.add_argument('model_dir', metavar='DIR', type=str, help='Directory containing transferset.pickle')
 	parser.add_argument('model_arch', metavar='MODEL_ARCH', type=str, help='Model name')
 	parser.add_argument('testdataset', metavar='DS_NAME', type=str, help='Name of test')
+	parser.add_argument('transfer_dataset', metavar='DS_NAME', type=str, help='Name of test')
 	parser.add_argument('--budgets', metavar='B', type=int)
 	# Optional arguments
 	parser.add_argument('-d', '--device_id', metavar='D', type=int, help='Device id. -1 for CPU.', default=0)
@@ -58,6 +63,7 @@ def main():
 						help='LR Decay Rate')
 	parser.add_argument('-w', '--num_workers', metavar='N', type=int, help='# Worker threads to load data', default=10)
 	parser.add_argument('--pretrained', type=str, help='Use pretrained network', default=None)
+	parser.add_argument('--pretrained_embed', type=str, help='Use pretrained embedding', default=None)
 	parser.add_argument('--weighted-loss', action='store_true', help='Use a weighted loss', default=False)
 	# Attacker's defense
 	parser.add_argument('--argmaxed', action='store_true', help='Only consider argmax labels', default=True)
@@ -100,11 +106,12 @@ def main():
 	with open(transferset_path, 'rb') as rf:
 		transferset_samples = pickle.load(rf)
 	num_classes = transferset_samples.num_classes
-	print('=> found transfer set with {} samples, {} classes'.format(
-		len(transferset_samples.data) * transferset_samples.batch_size, num_classes))
+	# print('=> found transfer set with {} samples, {} classes'.format(
+	# 	transferset_samples.data_num, num_classes))
 
 	# ----------- Set up testset
 	dataset_name = params['testdataset']
+
 	valid_datasets = datasets.__dict__.keys()
 
 	modelfamily = datasets.dataset_to_modelfamily[dataset_name]  # e.g. 'classification'
@@ -122,21 +129,47 @@ def main():
 	dataset_dir = datadir + '/' + folder_name + '_csv'
 
 	test_data_path = os.path.join(dataset_dir, dataset_name + "_ngrams_{}_test.data".format(ngrams))
+
 	if not os.path.exists(test_data_path):
-	# if not (os.path.exists(train_data_path) and os.path.exists(test_data_path)):
 		if not os.path.exists('.data'):
 			print("Creating directory {}".format(datadir))
 			os.mkdir('.data')
 		_, testset = text_classification.DATASETS[dataset_name](root='.data', ngrams=ngrams)
-		# print("Saving train data to {}".format(train_data_path))
-		# torch.save(trainset, train_data_path)
 		print("Saving test data to {}".format(test_data_path))
 		torch.save(testset, test_data_path)
 	else:
-	# 	print("Loading train data from {}".format(train_data_path))
-	# 	trainset = torch.load(train_data_path)
 		print("Loading test data from {}".format(test_data_path))
 		testset = torch.load(test_data_path)
+
+	# Transfer dataset
+	transfer_dataset_name = params['transfer_dataset']
+	ngrams = datasets.dataset_metadata[transfer_dataset_name]['ngram']
+	folder_name = datasets.dataset_metadata[transfer_dataset_name]['alias']
+	dataset_dir = datadir + '/' + folder_name + '_csv'
+	transfer_data_path = os.path.join(dataset_dir, 
+		transfer_dataset_name + "_ngrams_{}_train.data".format(ngrams) )
+
+	if not os.path.exists(transfer_data_path):
+		if not os.path.exists('.data'):
+			print("Creating directory {}".format(datadir))
+			os.mkdir('.data')
+		trainset, _ = text_classification.DATASETS[transfer_dataset_name](root='.data', ngrams=ngrams)
+	else:
+		print("Loading test data from {}".format(transfer_data_path))
+		trainset = torch.load(transfer_data_path)
+
+	# Generate pretrained_embedding for model
+	if params['pretrained_embed']:
+		if 'glove' in params['pretrained_embed']:
+			w2v_file = '.data/glove2w2v.txt'
+			_ = glove2word2vec(params['pretrained_embed'], w2v_file)
+			emb = KeyedVectors.load_word2vec_format(w2v_file)
+		else:
+			emb = Word2Vec.load(params['pretrained_embed'])
+		trainset_vocab = trainset.get_vocab()
+		pretrained_weights = model_utils.build_pretrain_weights(trainset_vocab, emb)
+	else:
+		pretrained_weights = None
 
 	# ----------- Set up model
 	model_name = params['model_arch']
@@ -153,14 +186,6 @@ def main():
 	train_valid_split = params['train_valid_split']
 	trainset = transferset_samples.data
 
-	if train_valid_split > .0:
-		data_num = len(transferset_samples.data)
-		valid_sample_num = int(data_num*train_valid_split)
-		validset = transferset_samples.data[:valid_sample_num] 
-		trainset = transferset_samples.data[valid_sample_num:]
-		print('Train-Valid split: train batch number: {}; valid batch number: {}'.format(
-			data_num-valid_sample_num, valid_sample_num))
-
 	if model_name == 'attention_model':
 
 		seq_len = count_seqlen_v2([trainset])
@@ -168,7 +193,7 @@ def main():
 							vocab_size=vocab_size, embed_dim=embed_dim,
 							hidden_size=hidden_size, num_classes=num_classes, 
 							seq_len=seq_len, num_layers=num_layers, 
-							dropout=dropout)
+							dropout=dropout, weights=pretrained_weights)
 		collate_fn = partial(model_utils.generate_batch_for_var_length, seq_len)
 
 	elif model_name in ['self_attention', 'rcnn']:
@@ -177,7 +202,7 @@ def main():
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
 							hidden_size=hidden_size, num_classes=num_classes, 
-							seq_len=seq_len)
+							seq_len=seq_len, weights=pretrained_weights)
 		collate_fn = partial(model_utils.generate_batch_for_var_length, seq_len)
 
 	elif model_name == 'wordembedding':
@@ -197,7 +222,7 @@ def main():
 
 	model = model.to(device)
 	start_time = time.time()
-	model_utils.train_and_valid_knockoff(trainset, validset, testset, 
+	model_utils.train_and_valid_knockoff(trainset, testset, 
 										 model, model_name, modelfamily, 
 										 optimizer=optimizer, criterion=criterion, 
 										 scheduler=scheduler, device=device, 
@@ -205,7 +230,16 @@ def main():
 
 	# Store arguments
 	params['created_on'] = str(datetime.now())
-	params_out_path = osp.join(model_dir, 'params_train.json')
+
+	params_train_name = 'params_train_'
+	if params['pretrained_embed']:
+		params_train_name += params['pretrained_embed'][6:]
+	else:
+		params_train_name += 'emb{}'.format(embed_dim)
+	params_train_name += '.json'
+
+	params_out_path = osp.join(model_dir, params_train_name)
+	# params_out_path = osp.join(model_dir, 'params_train.json')
 	with open(params_out_path, 'w') as jf:
 		params['train_time'] = time.time() - start_time
 		json.dump(params, jf, indent=True)

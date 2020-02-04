@@ -36,9 +36,11 @@ class AttentionModel(torch.nn.Module):
 		
 		self.word_embeddings = nn.Embedding(vocab_size, embed_dim)
 
-		if weights: 
-			self.word_embeddings.weights = \
-				nn.Parameter(weights, requires_grad=False)
+		if weights is not None:
+			self.word_embeddings.load_state_dict({'weight': weights})
+			self.word_embeddings.weight.requires_grad = False
+		else:
+			self.word_embeddings.weight.requires_grad = True
 				
 		self.lstm = nn.LSTM(embed_dim, hidden_size, batch_first=True, 
 							num_layers=num_layers,  dropout=dropout)
@@ -98,7 +100,8 @@ class AttentionModel(torch.nn.Module):
 				m.bias.data.fill(0)
 
 			elif type(m) == type(nn.Embedding):
-				m.weight.data.uniform_(-.5, .5)
+				if m.weight.requires_grad:
+					m.weight.data.uniform_(-.5, .5)
 
 			elif type(m) == type(nn.LSTM):
 				m.weight.data.uniform_(-.5, .5)

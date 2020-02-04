@@ -6,6 +6,7 @@ import json
 import os
 import os.path as osp
 import pickle
+import time
 from datetime import datetime
 from functools import partial
 
@@ -180,7 +181,6 @@ def main():
 	elif model_name in ['self_attention', 'rcnn']:
 
 		seq_len = count_seqlen([trainset, validset])
-		
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
 							hidden_size=hidden_size, num_classes=num_classes, 
@@ -190,6 +190,8 @@ def main():
 		model = zoo.get_net(model_name, modelfamily, pretrained, 
 							vocab_size=vocab_size, embed_dim=embed_dim,
 							num_classes=num_classes)
+
+	start_time = time.time()
 
 	model = model.to(device)
 
@@ -208,15 +210,18 @@ def main():
 
 	print('Start the training and validation process:')
 	print('')
-	model_utils.train_and_valid(
+	model_state, model_out_path = model_utils.train_and_valid(
 		trainset, validset, model, model_name, modelfamily, 
 		out_path, batch_size, optimizer, scheduler, criterion, 
 		lr, lr_gamma, num_workers, collate_fn, num_epochs, device)
+	model.load_state_dict(model_state['state_dict'])
 
 	print('Start the testing process:')
 	print('')
 	test_acc, test_loss = model_utils.test(
 		model, criterion, testset, batch_size, collate_fn, device)
+	model_state['test_acc'] = test_acc
+	torch.save(model_state, model_out_path)
 	print('Test acc: {:3.3f}, Test loss: {:3.3f}'.format(test_acc, test_loss))
 
 	# Store arguments in json file. Maybe for the transfer set step?
@@ -227,6 +232,7 @@ def main():
 		params['seq_len'] = seq_len
 		params['vocab_size'] = vocab_size
 		params['vocab_dict'] = vocab_dict
+		params['time_spent'] = time.time() - start_time
 		json.dump(params, jf, indent=True)
 
 		vocab_file = open(vocab_dict, 'wb')

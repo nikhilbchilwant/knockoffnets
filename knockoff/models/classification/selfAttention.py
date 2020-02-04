@@ -32,12 +32,11 @@ class SelfAttention(nn.Module):
 		self.vocab_size = vocab_size
 		self.embed_dim = embed_dim
 		self.seq_len = seq_len
-
 		self.word_embeddings = nn.Embedding(vocab_size, embed_dim)
-
-		if weights:
-			self.word_embeddings.weights = \
-				nn.Parameter(weights, requires_grad=False)
+		
+		if weights is not None:
+			self.word_embeddings.load_state_dict({'weight': weights})
+			self.word_embeddings.weight.requires_grad = False
 
 		self.dropout = .8
 		self.bilstm = nn.LSTM(embed_dim, hidden_size, 
@@ -92,6 +91,8 @@ class SelfAttention(nn.Module):
 		Output of the linear layer containing logits for pos & neg class.
 		
 		"""
+		# if self.mask:
+		# 	input_sentences = input_sentences * (input_sentences < self.mask) 
 
 		input = self.word_embeddings(input_sentences)
 		input = pack_padded_sequence(input, input_lengths)
@@ -107,7 +108,6 @@ class SelfAttention(nn.Module):
 			hidden_matrix.view(-1, hidden_matrix.size()[1]*hidden_matrix.size()[2]))
 		logits = self.label(fc_out)
 		# logits.size() = (batch_size, num_classes)
-
 		return logits
 
 def self_attention(**kwargs):

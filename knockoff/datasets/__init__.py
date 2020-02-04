@@ -38,5 +38,13 @@ dataset_metadata = {
 	'YelpReviewPolarity': {
 		'ngram': 1,
 		'alias': 'yelp_review_polarity'
+	},
+	'DBpedia': {
+		'ngram': 1,
+		'alias': 'dbpedia'
+	},
+	'AmazonReviewPolarity': {
+		'ngram': 1,
+		'alias': 'amazon_review_polarity'
 	}
 }

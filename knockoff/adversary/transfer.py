@@ -220,6 +220,9 @@ def main():
 		adversary_vocab = trainset.get_vocab()
 		adv_idx_to_victim_idx = remap_indices(victim_vocab, adversary_vocab)
 
+	else:
+		adversary_vocab = trainset.get_vocab()
+
 	# ----------- Initialize adversary
 	batch_size = params['batch_size']
 	nworkers = params['nworkers']
@@ -255,20 +258,20 @@ def main():
 
 	# 20200129 LIN,Y.D. Add budget options
 	start_time = time.time()
-	if params['unk_percentage'] and params['budget']:
+	# if params['unk_percentage'] and params['budget']:
 
-		# Check if the unk_percentage setting is reasonable or not.
-		total_unk_percent = analysis.count_total_unk_percent_wrt_victim(queryset, collate_fn)
-		print('The total unk percentage: {}'.format(total_unk_percent))
-		if params['unk_percentage'] > total_unk_percent:
-			raise ValueError('Unk percentage is higher than the max percentage: {}'.format(total_unk_percent))
+	# 	# Check if the unk_percentage setting is reasonable or not.
+	# 	total_unk_percent = analysis.count_total_unk_percent_wrt_victim(queryset, collate_fn)
+	# 	print('The total unk percentage: {}'.format(total_unk_percent))
+	# 	if params['unk_percentage'] > total_unk_percent:
+	# 		raise ValueError('Unk percentage is higher than the max percentage: {}'.format(total_unk_percent))
 
-		print('=> constructing transfer set...')
-		transferset = adversary.get_transferset_by_unk_budget(
-			params['unk_percentage'], params['budget'], params['budget_lowerbound'], collate_fn)
-	else:
-		print('=> constructing transfer set...')
-		transferset = adversary.get_transferset(params['budget'], collate_fn)	
+	# 	print('=> constructing transfer set...')
+	# 	transferset = adversary.get_transferset_by_unk_budget(
+	# 		params['unk_percentage'], params['budget'], params['budget_lowerbound'], collate_fn)
+	# else:
+	# 	print('=> constructing transfer set...')
+	transferset = adversary.get_transferset(params['budget'], collate_fn)	
 
 	print('check transferset.num_classes:', transferset.num_classes)
 

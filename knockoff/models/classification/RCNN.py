@@ -31,9 +31,11 @@ class RCNN(nn.Module):
 		self.seq_len = seq_len
 		
 		self.word_embeddings = nn.Embedding(vocab_size, embed_dim)# Initializing the look-up table.
-		if weights:
-			self.word_embeddings.weight = \
-				nn.Parameter(weights, requires_grad=False) # Assigning the look-up table to the pre-trained GloVe word embedding.
+		if weights is not None:
+			self.word_embeddings.load_state_dict({'weight': weights})
+			self.word_embeddings.weight.requires_grad = False
+		else:
+			self.word_embeddings.weight.requires_grad = True
 		self.dropout = 0.8
 		self.lstm = nn.LSTM(embed_dim, hidden_size, batch_first=True,
 							dropout=self.dropout, bidirectional=True)
@@ -52,7 +54,8 @@ class RCNN(nn.Module):
 				m.bias.data.fill(0)
 
 			elif type(m) == type(nn.Embedding):
-				m.weight.data.uniform_(-.5, .5)
+				if m.weight.requires_grad:
+					m.weight.data.uniform_(-.5, .5)
 
 			elif type(m) == type(nn.LSTM):
 				m.weight.data.uniform_(-.5, .5)
